@@ -674,69 +674,71 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white font-sans antialiased pb-10 selection:bg-cyan-500 selection:text-white">
       
-      {/* Шапка */}
-      <header className="sticky top-0 z-30 backdrop-blur-xl bg-slate-900/75 border-b border-white/10 px-3 py-2 sm:px-6 sm:py-3">
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-2">
+      {/* Шапка с адаптацией для мобильных устройств */}
+      <header className="sticky top-0 z-30 backdrop-blur-xl bg-slate-900/80 border-b border-white/10 px-2.5 py-1.5 sm:px-6 sm:py-2.5">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-1.5 sm:gap-3">
           
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="p-1.5 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 shadow-sm shrink-0">
-              <Sun className="text-white" size={18} />
+          {/* Логотип и город */}
+          <div className="flex items-center gap-1.5 min-w-0 shrink">
+            <div className="p-1 sm:p-1.5 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 shadow-sm shrink-0">
+              <Sun className="text-white" size={16} />
             </div>
             <div className="truncate leading-tight">
-              <div className="text-xs text-slate-400 font-medium">Погода</div>
-              <div className="text-sm sm:text-base font-semibold truncate flex items-center gap-1">
-                <MapPin size={13} className="text-cyan-400 shrink-0" />
-                <span className="truncate">{coords.name}</span>
+              <div className="text-[10px] text-slate-400 font-medium hidden sm:block">Погода</div>
+              <div className="text-xs sm:text-base font-semibold truncate flex items-center gap-0.5">
+                <MapPin size={11} className="text-cyan-400 shrink-0" />
+                <span className="truncate max-w-[85px] sm:max-w-[160px]">{coords.name}</span>
                 {isCurrentDefault && (
-                  <span className="text-[10px] bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 px-1.5 py-0.2 rounded-full ml-1">
-                    По умолч.
+                  <span className="text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 px-1 py-0.2 rounded-full shrink-0 hidden xs:inline-block">
+                    Дефолт
                   </span>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Переключение поставщика */}
-          <div className="inline-flex rounded-lg bg-white/10 p-0.5 border border-white/15">
+          {/* Переключатель поставщиков (компактный на мобильных) */}
+          <div className="inline-flex rounded-lg bg-white/10 p-0.5 border border-white/15 shrink-0">
             <button
               onClick={() => handleSwitchProvider('twc')}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+              className={`px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-md text-[10px] sm:text-xs font-semibold transition-all ${
                 provider === 'twc'
                   ? 'bg-cyan-500 text-slate-950 shadow-sm'
                   : 'text-slate-300 hover:text-white'
               }`}
             >
-              Weather.com
+              TWC
             </button>
             <button
               onClick={() => handleSwitchProvider('accuweather')}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+              className={`px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded-md text-[10px] sm:text-xs font-semibold transition-all ${
                 provider === 'accuweather'
                   ? 'bg-cyan-500 text-slate-950 shadow-sm'
                   : 'text-slate-300 hover:text-white'
               }`}
             >
-              AccuWeather
+              Accu
             </button>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Правый блок: Поиск, Гео, Шестеренка */}
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             <form onSubmit={handleSearchCity} className="relative flex items-center">
               <input
                 type="text"
                 placeholder="Город..."
                 value={cityQuery}
                 onChange={(e) => setCityQuery(e.target.value)}
-                className="w-24 sm:w-48 pl-6 pr-6 py-1 text-xs rounded-lg bg-white/10 border border-white/15 focus:border-cyan-400 focus:outline-none transition-all text-white placeholder:text-slate-400"
+                className="w-16 xs:w-20 sm:w-44 focus:w-28 sm:focus:w-44 pl-5 pr-4 py-1 text-xs rounded-lg bg-white/10 border border-white/15 focus:border-cyan-400 focus:outline-none transition-all text-white placeholder:text-slate-400"
               />
               <Search size={11} className="absolute left-1.5 text-slate-400 pointer-events-none" />
               {cityQuery && (
                 <button
                   type="button"
                   onClick={() => setCityQuery('')}
-                  className="absolute right-1.5 text-slate-400 hover:text-white"
+                  className="absolute right-1 text-slate-400 hover:text-white"
                 >
-                  <X size={11} />
+                  <X size={10} />
                 </button>
               )}
             </form>
@@ -744,17 +746,18 @@ export default function App() {
             <button
               onClick={handleGeoLocation}
               title="Мое местоположение"
-              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/15 active:scale-95 border border-white/15 transition-all text-slate-200"
+              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/15 active:scale-95 border border-white/15 transition-all text-slate-200 shrink-0"
             >
-              <Compass size={15} />
+              <Compass size={14} />
             </button>
 
+            {/* Шестеренка: гарантированно не сожмется и не вылезет за экран */}
             <button
               onClick={() => setIsSettingsOpen(true)}
-              title="Настройки ключей и города"
-              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/15 active:scale-95 border border-white/15 transition-all text-slate-200"
+              title="Настройки"
+              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/15 active:scale-95 border border-white/15 transition-all text-slate-200 shrink-0"
             >
-              <Settings size={15} />
+              <Settings size={14} />
             </button>
           </div>
         </div>
@@ -783,9 +786,9 @@ export default function App() {
           </div>
         )}
 
-        {/* Избранное */}
+        {/* Панель избранных городов */}
         {favorites.length > 0 && (
-          <div className="max-w-4xl mx-auto mt-2 pt-1.5 border-t border-white/10 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          <div className="max-w-4xl mx-auto mt-1.5 pt-1 border-t border-white/10 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
             <span className="text-xs text-slate-400 font-medium shrink-0 flex items-center gap-1 mr-0.5">
               <Star size={11} className="text-amber-400 fill-amber-400" />
               Избранное:
