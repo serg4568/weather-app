@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Search, MapPin, RefreshCw, AlertCircle, Settings, X, ChevronRight,
   ChevronLeft, Sun, Wind, Droplets, Eye, Gauge, Compass, Thermometer,
-  Navigation, Star, Radio, BellRing
+  Navigation, Star, Radio, BellRing, Check
 } from 'lucide-react';
 
 // ==========================================
@@ -39,22 +39,47 @@ const WeatherIcon = ({ iconCode, isDay = true, provider = "twc", size = 24, clas
   );
 };
 
-// Функция определения стиля заливки карточки в зависимости от осадков
+// Функция адаптивного цвета температуры в диапазоне от -60°C до +60°C
+const getTempColor = (temp) => {
+  const clamped = Math.max(-60, Math.min(60, temp));
+  const stops = [
+    { t: -60, r: 147, g: 51,  b: 234 }, // Фиолетовый (-60)
+    { t: -30, r: 59,  g: 130, b: 246 }, // Глубокий синий (-30)
+    { t: -10, r: 6,   g: 182, b: 212 }, // Голубой/бирюзовый (-10)
+    { t: 0,   r: 16,  g: 185, b: 129 }, // Зеленовато-бирюзовый (0)
+    { t: 15,  r: 132, g: 204, b: 22  }, // Салатово-зеленый (+15)
+    { t: 25,  r: 234, g: 179, b: 8   }, // Желто-золотой (+25)
+    { t: 38,  r: 249, g: 115, b: 22  }, // Оранжевый (+38)
+    { t: 60,  r: 220, g: 38,  b: 38  }  // Сильно красный (+60)
+  ];
+
+  for (let i = 0; i < stops.length - 1; i++) {
+    const s1 = stops[i];
+    const s2 = stops[i + 1];
+    if (clamped >= s1.t && clamped <= s2.t) {
+      const factor = (clamped - s1.t) / (s2.t - s1.t);
+      const r = Math.round(s1.r + factor * (s2.r - s1.r));
+      const g = Math.round(s1.g + factor * (s2.g - s1.g));
+      const b = Math.round(s1.b + factor * (s2.b - s1.b));
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+  }
+  return clamped > 0 ? "rgb(220, 38, 38)" : "rgb(147, 51, 234)";
+};
+
+// Стиль заливки карточки при осадках
 const getPrecipitationStyle = (rain = 0, snow = 0, ice = 0, total = 0) => {
   const r = Number(rain) || 0;
   const s = Number(snow) || 0;
   const i = Number(ice) || 0;
   const t = Number(total) || 0;
 
-  // Снег -> более светлый/голубой оттенок
   if (s > 0) {
     return "bg-sky-500/20 border-sky-400/40 shadow-sm shadow-sky-500/10";
   }
-  // Дождь / лед / общий qpf -> немного синий оттенок
   if (r > 0 || i > 0 || t > 0) {
     return "bg-blue-600/25 border-blue-400/40 shadow-sm shadow-blue-500/10";
   }
-  // Без осадков -> стандартный полупрозрачный фон
   return "bg-white/5 border-white/10";
 };
 
@@ -112,7 +137,7 @@ const adaptTwcData = (raw) => {
   const current = {
     temperature: currentRaw.temperature ?? 0,
     temperatureFeelsLike: currentRaw.temperatureFeelsLike ?? currentRaw.temperature ?? 0,
-    feelsLikePhrase: null, // У TWC описание ощущения генерируется из разницы температур
+    feelsLikePhrase: null,
     wxPhraseLong: currentRaw.wxPhraseLong || "Ясно",
     iconCode: currentRaw.iconCode,
     isDay: currentRaw.dayOrNight !== 'N',
@@ -183,9 +208,9 @@ const adaptTwcData = (raw) => {
       maxTemp: Math.round(dailyRaw.calendarDayTemperatureMax?.[i] ?? 0),
       minTemp: Math.round(dailyRaw.calendarDayTemperatureMin?.[i] ?? 0),
       day: {
-        iconCode: dp.iconCode?.[dIdx] ?? 44,
+        iconCode: dp.iconCode?.[dIdx] ?? 30,
         temp: dp.temperature?.[dIdx] !== null && dp.temperature?.[dIdx] !== undefined ? Math.round(dp.temperature[dIdx]) : Math.round(dailyRaw.calendarDayTemperatureMax?.[i] ?? 0),
-        phrase: dp.wxPhraseLong?.[dIdx] || "--",
+        phrase: dp.wxPhraseLong?.[dIdx] || "Ясно",
         pop: dp.precipChance?.[dIdx] ?? 0,
         rain: dRain, snow: dSnow, ice: dIce, total: dTotal,
         precipText: formatPrecipDetails(dRain, dSnow, dIce, dTotal),
@@ -194,9 +219,9 @@ const adaptTwcData = (raw) => {
         windCard: dp.windDirectionCardinal?.[dIdx] || ""
       },
       night: {
-        iconCode: dp.iconCode?.[nIdx] ?? 44,
+        iconCode: dp.iconCode?.[nIdx] ?? 31,
         temp: dp.temperature?.[nIdx] !== null && dp.temperature?.[nIdx] !== undefined ? Math.round(dp.temperature[nIdx]) : Math.round(dailyRaw.calendarDayTemperatureMin?.[i] ?? 0),
-        phrase: dp.wxPhraseLong?.[nIdx] || "--",
+        phrase: dp.wxPhraseLong?.[nIdx] || "Ясно",
         pop: dp.precipChance?.[nIdx] ?? 0,
         rain: nRain, snow: nSnow, ice: nIce, total: nTotal,
         precipText: formatPrecipDetails(nRain, nSnow, nIce, nTotal),
@@ -218,7 +243,6 @@ const adaptAccuWeatherData = (currentConditionsRaw, hourlyRaw, dailyRaw) => {
     ? currentConditionsRaw[0] 
     : (Array.isArray(hourlyRaw) && hourlyRaw.length > 0 ? hourlyRaw[0] : {});
 
-  // Описание ощущения из RealFeelTemperature.Metric.Phrase
   const feelsLikePhrase = cur.RealFeelTemperature?.Metric?.Phrase || cur.RealFeelTemperature?.Phrase || null;
 
   const current = {
@@ -284,7 +308,6 @@ const adaptAccuWeatherData = (currentConditionsRaw, hourlyRaw, dailyRaw) => {
       day: {
         iconCode: d.Icon,
         temp: Math.round(df.Temperature?.Maximum?.Value ?? 0),
-        // Читаем LongPhrase для Дня
         phrase: d.LongPhrase || d.ShortPhrase || d.IconPhrase || "Ясно",
         pop: d.PrecipitationProbability ?? 0,
         rain: dRain, snow: dSnow, ice: dIce, total: dTotal,
@@ -296,7 +319,6 @@ const adaptAccuWeatherData = (currentConditionsRaw, hourlyRaw, dailyRaw) => {
       night: {
         iconCode: n.Icon,
         temp: Math.round(df.Temperature?.Minimum?.Value ?? 0),
-        // Читаем LongPhrase для Ночи
         phrase: n.LongPhrase || n.ShortPhrase || n.IconPhrase || "Ясно",
         pop: n.PrecipitationProbability ?? 0,
         rain: nRain, snow: nSnow, ice: nIce, total: nTotal,
@@ -317,8 +339,11 @@ const adaptAccuWeatherData = (currentConditionsRaw, hourlyRaw, dailyRaw) => {
 export default function App() {
   const [provider, setProvider] = useState(() => localStorage.getItem('weather_provider') || 'twc');
 
-  const [twcKey, setTwcKey] = useState(() => localStorage.getItem('twc_api_key') || '');
-  const [accuKey, setAccuKey] = useState(() => localStorage.getItem('accu_api_key') || '');
+  const envTwcKey = import.meta.env?.VITE_TWC_API_KEY || '';
+  const envAccuKey = import.meta.env?.VITE_ACCU_API_KEY || '';
+
+  const [twcKey, setTwcKey] = useState(() => envTwcKey || localStorage.getItem('twc_api_key') || '');
+  const [accuKey, setAccuKey] = useState(() => envAccuKey || localStorage.getItem('accu_api_key') || '');
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [tempTwcKey, setTempTwcKey] = useState(twcKey);
@@ -327,6 +352,19 @@ export default function App() {
   const [cityQuery, setCityQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
 
+  // Город по умолчанию
+  const [defaultCity, setDefaultCity] = useState(() => {
+    try {
+      const saved = localStorage.getItem('twc_default_city');
+      return saved ? JSON.parse(saved) : { name: "Минск", lat: 53.9025, lon: 27.5618 };
+    } catch {
+      return { name: "Минск", lat: 53.9025, lon: 27.5618 };
+    }
+  });
+
+  const [coords, setCoords] = useState(defaultCity);
+
+  // Избранные города
   const [favorites, setFavorites] = useState(() => {
     try {
       const saved = localStorage.getItem('twc_favorite_cities');
@@ -339,7 +377,6 @@ export default function App() {
     }
   });
 
-  const [coords, setCoords] = useState({ lat: 53.9025, lon: 27.5618, name: "Минск" });
   const [normalizedData, setNormalizedData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -347,10 +384,47 @@ export default function App() {
 
   const hourlyScrollRef = useRef(null);
 
+  // Запрос геолокации при первом старте
+  useEffect(() => {
+    const hasVisited = localStorage.getItem('weather_app_visited');
+    if (!hasVisited && navigator.geolocation) {
+      localStorage.setItem('weather_app_visited', 'true');
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const { latitude, longitude } = pos.coords;
+          let name = "Мое местоположение";
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=ru`);
+            const d = await res.json();
+            name = d.address?.city || d.address?.town || d.address?.village || name;
+          } catch {}
+          const newCity = { lat: Number(latitude.toFixed(4)), lon: Number(longitude.toFixed(4)), name };
+          setCoords(newCity);
+          setDefaultCity(newCity);
+          localStorage.setItem('twc_default_city', JSON.stringify(newCity));
+        },
+        () => {},
+        { timeout: 7000 }
+      );
+    }
+  }, []);
+
   const handleSwitchProvider = (newProvider) => {
     setProvider(newProvider);
     localStorage.setItem('weather_provider', newProvider);
   };
+
+  const handleSetCurrentAsDefault = () => {
+    setDefaultCity(coords);
+    localStorage.setItem('twc_default_city', JSON.stringify(coords));
+  };
+
+  const isCurrentDefault = useMemo(() => {
+    return defaultCity && (
+      defaultCity.name.toLowerCase() === coords.name.toLowerCase() ||
+      (Math.abs(defaultCity.lat - coords.lat) < 0.05 && Math.abs(defaultCity.lon - coords.lon) < 0.05)
+    );
+  }, [defaultCity, coords]);
 
   const saveFavorites = (updatedList) => {
     setFavorites(updatedList);
@@ -420,9 +494,7 @@ export default function App() {
           const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=ru`);
           const d = await res.json();
           name = d.address?.city || d.address?.town || d.address?.village || name;
-        } catch {
-          // fallback
-        }
+        } catch {}
         setCoords({ lat: Number(latitude.toFixed(4)), lon: Number(longitude.toFixed(4)), name });
       },
       (err) => {
@@ -457,8 +529,11 @@ export default function App() {
                   validTimeLocal: Array.from({ length: 24 }, (_, i) => `2026-10-21T${String(14 + i).padStart(2, '0')}:00:00+0300`),
                   temperature: Array(24).fill(12),
                   iconCode: Array(24).fill(28),
-                  wxPhraseLong: Array(24).fill("Облачно"),
-                  qpfRain: [0, 0, 1.2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                  wxPhraseLong: [
+                    "Преимущественно облачно", "Небольшой кратковременный дождь", "Облачно с прояснениями",
+                    "Местами сильный ливень и гроза", "Переменная облачность", "Ясно"
+                  ].concat(Array(18).fill("Облачно")),
+                  qpfRain: [0, 1.2, 0, 3.4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
                 },
                 "v3-wx-forecast-daily-15day": {
                   validTimeLocal: Array.from({ length: 15 }, (_, i) => `2026-10-${21 + i}T07:00:00+0300`),
@@ -521,7 +596,7 @@ export default function App() {
                 Array.from({ length: 24 }, (_, i) => ({
                   DateTime: `2026-10-21T${String(14 + i).padStart(2, '0')}:00:00+03:00`,
                   WeatherIcon: 7,
-                  IconPhrase: "Облачно",
+                  IconPhrase: i % 2 === 0 ? "Небольшой кратковременный дождь" : "Облачно",
                   Temperature: { Value: 12 },
                   Rain: { Value: i % 4 === 0 ? 1.4 : 0 },
                   Wind: { Speed: { Value: 15 }, Direction: { Degrees: 140, Localized: "ЮВ" } }
@@ -594,16 +669,6 @@ export default function App() {
     return () => { isCancelled = true; };
   }, [coords, provider, twcKey, accuKey]);
 
-  const minMaxRange = useMemo(() => {
-    if (!normalizedData?.daily || normalizedData.daily.length === 0) return { min: 0, max: 25 };
-    const mins = normalizedData.daily.map(d => d.minTemp);
-    const maxs = normalizedData.daily.map(d => d.maxTemp);
-    return {
-      min: Math.min(...mins, 0),
-      max: Math.max(...maxs, 25)
-    };
-  }, [normalizedData]);
-
   const { alertText, current, stationInfo, hourly, daily } = normalizedData || {};
 
   return (
@@ -622,6 +687,11 @@ export default function App() {
               <div className="text-sm sm:text-base font-semibold truncate flex items-center gap-1">
                 <MapPin size={13} className="text-cyan-400 shrink-0" />
                 <span className="truncate">{coords.name}</span>
+                {isCurrentDefault && (
+                  <span className="text-[10px] bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 px-1.5 py-0.2 rounded-full ml-1">
+                    По умолч.
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -681,7 +751,7 @@ export default function App() {
 
             <button
               onClick={() => setIsSettingsOpen(true)}
-              title="Настройки ключей"
+              title="Настройки ключей и города"
               className="p-1.5 rounded-lg bg-white/10 hover:bg-white/15 active:scale-95 border border-white/15 transition-all text-slate-200"
             >
               <Settings size={15} />
@@ -754,7 +824,7 @@ export default function App() {
           <div className="mb-2 px-3 py-1.5 rounded-xl bg-cyan-950/40 border border-cyan-400/30 text-cyan-200 text-xs flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5">
               <AlertCircle size={13} className="shrink-0 text-cyan-300" />
-              <span><strong>Демо-режим ({provider === 'twc' ? 'Weather.com' : 'AccuWeather'}):</strong> введите ключ в настройках.</span>
+              <span><strong>Демо-режим ({provider === 'twc' ? 'Weather.com' : 'AccuWeather'}):</strong> добавьте ключ в настройках или в файл <code>.env</code>.</span>
             </span>
             <button
               onClick={() => setIsSettingsOpen(true)}
@@ -787,20 +857,24 @@ export default function App() {
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1.5">
+                    
+                    {/* 2. ИСПРАВЛЕНИЕ: надпись с именем поставщика без слова "Сейчас" */}
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-xs font-medium leading-tight">
                       <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                      Сейчас ({provider === 'twc' ? 'Weather.com' : 'AccuWeather'})
+                      {provider === 'twc' ? 'Weather.com' : 'AccuWeather'}
                     </span>
+
+                    {/* 1. ИСПРАВЛЕНИЕ: только звёздочка без текста */}
                     <button
                       onClick={toggleFavorite}
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium transition-all ${
+                      className={`p-1 rounded-full border transition-all active:scale-95 ${
                         isCurrentFavorite
                           ? 'bg-amber-400/20 border-amber-400/40 text-amber-300'
                           : 'bg-white/5 hover:bg-white/10 border-white/15 text-slate-300'
                       }`}
+                      title={isCurrentFavorite ? "В избранном" : "Добавить в избранное"}
                     >
-                      <Star size={11} className={isCurrentFavorite ? "fill-amber-300 text-amber-300" : ""} />
-                      <span>{isCurrentFavorite ? "В избранном" : "Сохранить"}</span>
+                      <Star size={14} className={isCurrentFavorite ? "fill-amber-300 text-amber-300" : ""} />
                     </button>
                   </div>
 
@@ -907,7 +981,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Карточка: Ощущается + Описание ощущения из RealFeel */}
+                {/* Карточка: Ощущается */}
                 <div className="bg-white/5 border border-white/10 rounded-xl p-2 flex flex-col justify-between">
                   <div className="flex items-center justify-between text-slate-400 mb-0.5">
                     <span className="text-xs font-medium">Ощущ.</span>
@@ -947,7 +1021,7 @@ export default function App() {
 
             </section>
 
-            {/* 2. Почасовой прогноз (с цветовой заливкой осадков) */}
+            {/* 2. Почасовой прогноз */}
             <section className="rounded-2xl bg-white/5 border border-white/15 backdrop-blur-xl p-3 sm:p-4 shadow-lg">
               <div className="flex items-center justify-between mb-2.5">
                 <div className="flex items-center gap-1.5">
@@ -981,13 +1055,12 @@ export default function App() {
               >
                 {hourly?.map((h, idx) => {
                   const hour = new Date(h.timeStr).getHours().toString().padStart(2, '0') + ':00';
-                  // Получаем цвет заливки карточки часа
                   const precipBgClass = getPrecipitationStyle(h.rain, h.snow, h.ice, h.total);
 
                   return (
                     <div
                       key={idx}
-                      className={`shrink-0 w-24 sm:w-28 flex flex-col items-center justify-between p-2 rounded-xl border transition-all duration-200 ${precipBgClass}`}
+                      className={`min-w-[5.75rem] w-24 shrink-0 flex flex-col items-center justify-between p-2 rounded-xl border transition-all duration-200 ${precipBgClass}`}
                     >
                       <span className="text-xs font-semibold text-slate-200">
                         {idx === 0 ? "Сейчас" : hour}
@@ -1006,12 +1079,18 @@ export default function App() {
                         {h.temperature}°
                       </span>
 
-                      <span className="text-xs text-slate-300 text-center line-clamp-2 h-7 leading-tight mt-1 px-0.5">
-                        {h.phrase}
-                      </span>
+                      {/* Защита от переполнения текста */}
+                      <div className="w-full h-8 flex items-center justify-center my-0.5 overflow-hidden">
+                        <span 
+                          className="text-[11px] text-slate-300 text-center line-clamp-2 leading-tight break-words px-0.5"
+                          title={h.phrase}
+                        >
+                          {h.phrase}
+                        </span>
+                      </div>
 
                       {/* Ветер */}
-                      <div className="w-full mt-1.5 pt-1 border-t border-white/10 flex items-center justify-center gap-1 text-xs text-cyan-200 font-medium">
+                      <div className="w-full mt-1 pt-1 border-t border-white/10 flex items-center justify-center gap-1 text-xs text-cyan-200 font-medium">
                         <WindArrow deg={h.windDirection} size={10} className="text-cyan-400" />
                         <span>{h.windDirectionCardinal}</span>
                         <span className="text-slate-300 font-normal">{h.windSpeed}</span>
@@ -1028,7 +1107,7 @@ export default function App() {
                           <span className="text-slate-500">—</span>
                         )}
                         {h.precipText && (
-                          <span className="text-cyan-200 font-medium text-xs mt-0.5">
+                          <span className="text-cyan-200 font-medium text-xs mt-0.5 truncate max-w-full" title={h.precipText}>
                             {h.precipText}
                           </span>
                         )}
@@ -1039,7 +1118,7 @@ export default function App() {
               </div>
             </section>
 
-            {/* 3. Прогноз на 15 дней (с LongPhrase и цветовой заливкой осадков) */}
+            {/* 3. Прогноз на 15 дней (с адаптивной цветной шкалой от -60 до +60) */}
             <section className="rounded-2xl bg-white/5 border border-white/15 backdrop-blur-xl p-3 sm:p-4 shadow-lg">
               <div className="flex items-center justify-between mb-2.5">
                 <div className="flex items-center gap-1.5">
@@ -1057,16 +1136,23 @@ export default function App() {
                   const dayName = dayIdx === 0 ? "Сегодня" : dItem.dayName;
                   const formattedDate = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
 
-                  // Заливка для Дня и Ночи
                   const dayPrecipBg = getPrecipitationStyle(dItem.day.rain, dItem.day.snow, dItem.day.ice, dItem.day.total);
                   const nightPrecipBg = getPrecipitationStyle(dItem.night.rain, dItem.night.snow, dItem.night.ice, dItem.night.total);
+
+                  // 3. ИСПРАВЛЕНИЕ: Расчет диапазона от -60°C до +60°C (всего 120 градусов)
+                  const minPercent = Math.max(0, Math.min(100, ((dItem.minTemp - (-60)) / 120) * 100));
+                  const maxPercent = Math.max(0, Math.min(100, ((dItem.maxTemp - (-60)) / 120) * 100));
+                  
+                  // Получение цветов краев температурного отрезка
+                  const minColor = getTempColor(dItem.minTemp);
+                  const maxColor = getTempColor(dItem.maxTemp);
 
                   return (
                     <div
                       key={dayIdx}
                       className="p-2.5 sm:p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all flex flex-col gap-2"
                     >
-                      {/* Шапка дня */}
+                      {/* Шапка дня с адаптивной цветной шкалой от -60 до +60 */}
                       <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-1.5">
                         <div className="flex items-center gap-2">
                           <span className={`text-sm sm:text-base font-bold min-w-16 ${dayIdx === 0 ? 'text-cyan-400' : 'text-white'}`}>
@@ -1077,18 +1163,26 @@ export default function App() {
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-1.5 w-40 sm:w-56">
-                          <span className="text-xs sm:text-sm font-semibold text-slate-300 w-6 text-right">{dItem.minTemp}°</span>
-                          <div className="relative flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                        <div className="flex items-center gap-1.5 w-44 sm:w-60">
+                          <span className="text-xs sm:text-sm font-semibold text-slate-300 w-6 text-right">
+                            {dItem.minTemp}°
+                          </span>
+
+                          {/* Фоновый трек шкалы (-60 до +60) с адаптивным цветным градиентом */}
+                          <div className="relative flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
                             <div
-                              className="absolute top-0 bottom-0 rounded-full bg-gradient-to-r from-cyan-400 via-amber-400 to-rose-400"
+                              className="absolute top-0 bottom-0 rounded-full transition-all duration-300 shadow-sm"
                               style={{
-                                left: `${Math.max(0, ((dItem.minTemp - minMaxRange.min) / (minMaxRange.max - minMaxRange.min)) * 100)}%`,
-                                right: `${Math.max(0, 100 - ((dItem.maxTemp - minMaxRange.min) / (minMaxRange.max - minMaxRange.min)) * 100)}%`
+                                left: `${minPercent}%`,
+                                width: `${Math.max(4, maxPercent - minPercent)}%`,
+                                background: `linear-gradient(to right, ${minColor}, ${maxColor})`
                               }}
                             />
                           </div>
-                          <span className="text-xs sm:text-sm font-bold text-white w-6 text-left">{dItem.maxTemp}°</span>
+
+                          <span className="text-xs sm:text-sm font-bold text-white w-6 text-left">
+                            {dItem.maxTemp}°
+                          </span>
                         </div>
                       </div>
 
@@ -1099,7 +1193,6 @@ export default function App() {
                         <div className={`flex items-start justify-between gap-2 rounded-xl p-2.5 border transition-colors ${dayPrecipBg}`}>
                           <div className="flex items-start gap-2.5 min-w-0">
                             
-                            {/* Стек: Иконка + осадки */}
                             <div className="flex flex-col items-center justify-center shrink-0 w-14 text-center">
                               <div className="p-1 rounded-lg bg-amber-500/10">
                                 <WeatherIcon
@@ -1126,7 +1219,6 @@ export default function App() {
                               </div>
                             </div>
 
-                            {/* Заголовок с температурой и подробное описание LongPhrase */}
                             <div className="min-w-0">
                               <div className="text-xs font-semibold text-amber-200 leading-tight">
                                 День: <span className="text-sm font-bold text-amber-300">{dItem.day.temp}°</span>
@@ -1137,7 +1229,6 @@ export default function App() {
                             </div>
                           </div>
 
-                          {/* Ветер */}
                           {dItem.day.windSpeed !== null && (
                             <div className="shrink-0 text-xs text-slate-300 flex items-center gap-1 pl-1 self-start pt-0.5 whitespace-nowrap">
                               <WindArrow deg={dItem.day.windDir} size={11} className="text-cyan-300" />
@@ -1150,7 +1241,6 @@ export default function App() {
                         <div className={`flex items-start justify-between gap-2 rounded-xl p-2.5 border transition-colors ${nightPrecipBg}`}>
                           <div className="flex items-start gap-2.5 min-w-0">
                             
-                            {/* Стек: Иконка + осадки */}
                             <div className="flex flex-col items-center justify-center shrink-0 w-14 text-center">
                               <div className="p-1 rounded-lg bg-indigo-500/10">
                                 <WeatherIcon
@@ -1177,7 +1267,6 @@ export default function App() {
                               </div>
                             </div>
 
-                            {/* Заголовок с температурой и подробное описание LongPhrase */}
                             <div className="min-w-0">
                               <div className="text-xs font-semibold text-indigo-200 leading-tight">
                                 Ночь: <span className="text-sm font-bold text-indigo-300">{dItem.night.temp}°</span>
@@ -1188,7 +1277,6 @@ export default function App() {
                             </div>
                           </div>
 
-                          {/* Ветер */}
                           {dItem.night.windSpeed !== null && (
                             <div className="shrink-0 text-xs text-slate-300 flex items-center gap-1 pl-1 self-start pt-0.5 whitespace-nowrap">
                               <WindArrow deg={dItem.night.windDir} size={11} className="text-cyan-300" />
@@ -1214,7 +1302,7 @@ export default function App() {
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
                 <Settings size={18} className="text-cyan-400" />
-                Настройки поставщиков API
+                Настройки приложения
               </h3>
               <button
                 onClick={() => setIsSettingsOpen(false)}
@@ -1224,8 +1312,33 @@ export default function App() {
               </button>
             </div>
 
+            {/* Выбор города по умолчанию */}
+            <div className="mb-4 pb-3 border-b border-white/10">
+              <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                Город по умолчанию при старте:
+              </label>
+              <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl p-2.5">
+                <div className="truncate">
+                  <div className="text-xs text-slate-400">Текущий выбор:</div>
+                  <div className="text-sm font-bold text-white truncate">{defaultCity?.name}</div>
+                </div>
+                {!isCurrentDefault ? (
+                  <button
+                    onClick={handleSetCurrentAsDefault}
+                    className="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-400/40 text-xs font-medium transition-all"
+                  >
+                    Сделать {coords.name} основным
+                  </button>
+                ) : (
+                  <span className="flex items-center gap-1 text-xs text-emerald-400 font-medium px-2 py-1 bg-emerald-500/10 rounded-lg">
+                    <Check size={13} /> Выбран
+                  </span>
+                )}
+              </div>
+            </div>
+
             <p className="text-xs text-slate-300 mb-3 leading-snug">
-              Введите API-ключи для каждого сервиса. Они сохраняются локально. Если ключ не указан, для сервиса работает демо-режим.
+              Ключи сохраняются локально или считываются из <code>.env</code> (переменные <code>VITE_TWC_API_KEY</code> и <code>VITE_ACCU_API_KEY</code>).
             </p>
 
             <div className="space-y-3">
@@ -1261,7 +1374,7 @@ export default function App() {
                   onClick={handleSaveKeys}
                   className="flex-1 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all"
                 >
-                  Сохранить ключи
+                  Сохранить
                 </button>
                 <button
                   type="button"
