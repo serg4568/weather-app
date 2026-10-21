@@ -208,9 +208,9 @@ const adaptTwcData = (raw) => {
       maxTemp: Math.round(dailyRaw.calendarDayTemperatureMax?.[i] ?? 0),
       minTemp: Math.round(dailyRaw.calendarDayTemperatureMin?.[i] ?? 0),
       day: {
-        iconCode: dp.iconCode?.[dIdx] ?? 30,
+        iconCode: dp.iconCode?.[dIdx] ?? 44,
         temp: dp.temperature?.[dIdx] !== null && dp.temperature?.[dIdx] !== undefined ? Math.round(dp.temperature[dIdx]) : Math.round(dailyRaw.calendarDayTemperatureMax?.[i] ?? 0),
-        phrase: dp.wxPhraseLong?.[dIdx] || "Ясно",
+        phrase: dp.wxPhraseLong?.[dIdx] || "--",
         pop: dp.precipChance?.[dIdx] ?? 0,
         rain: dRain, snow: dSnow, ice: dIce, total: dTotal,
         precipText: formatPrecipDetails(dRain, dSnow, dIce, dTotal),
@@ -219,9 +219,9 @@ const adaptTwcData = (raw) => {
         windCard: dp.windDirectionCardinal?.[dIdx] || ""
       },
       night: {
-        iconCode: dp.iconCode?.[nIdx] ?? 31,
+        iconCode: dp.iconCode?.[nIdx] ?? 44,
         temp: dp.temperature?.[nIdx] !== null && dp.temperature?.[nIdx] !== undefined ? Math.round(dp.temperature[nIdx]) : Math.round(dailyRaw.calendarDayTemperatureMin?.[i] ?? 0),
-        phrase: dp.wxPhraseLong?.[nIdx] || "Ясно",
+        phrase: dp.wxPhraseLong?.[nIdx] || "--",
         pop: dp.precipChance?.[nIdx] ?? 0,
         rain: nRain, snow: nSnow, ice: nIce, total: nTotal,
         precipText: formatPrecipDetails(nRain, nSnow, nIce, nTotal),
@@ -1009,8 +1009,7 @@ export default function App() {
               {provider === 'twc' && stationInfo && (
                 <div className="mt-2.5 pt-2 border-t border-white/10 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-300 leading-tight">
                   <span className="flex items-center gap-1 text-cyan-300 font-medium">
-                    <Radio size={12} className="text-cyan-400" />
-                    Метеостанция:
+                    <Radio size={12} className="text-cyan-400" />                    
                   </span>
                   <span className="text-white font-semibold">{stationInfo.name}</span>
                   {stationInfo.temp && <span>• {stationInfo.temp}</span>}
