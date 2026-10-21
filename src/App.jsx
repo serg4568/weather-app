@@ -14,7 +14,7 @@ const WindArrow = ({ deg = 0, size = 12, className = "" }) => (
   <Navigation
     size={size}
     className={`inline-block transform ${className}`}
-    style={{ transform: `rotate(${(deg + 180) % 360}deg)` }}
+    style={{ transform: `rotate(${(deg - 225 + 360) % 360}deg)` }}
   />
 );
 
