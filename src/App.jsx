@@ -9,7 +9,7 @@ import {
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ И КОМПОНЕНТЫ
 // ==========================================
 
-// Стрелка направления ветра с компенсацией угла начального положения
+// Стрелка направления ветра с компенсацией угла начального положения (-225°)[cite: 2]
 const WindArrow = ({ deg = 0, size = 12, className = "" }) => (
   <Navigation
     size={size}
@@ -18,7 +18,7 @@ const WindArrow = ({ deg = 0, size = 12, className = "" }) => (
   />
 );
 
-// Универсальный рендер PNG-иконки
+// Универсальный рендер PNG-иконки[cite: 2]
 const WeatherIcon = ({ iconCode, isDay = true, provider = "twc", size = 24, className = "" }) => {
   const folder = provider === "accuweather" ? "accuicons" : "weather-icons";
   const code = iconCode !== undefined && iconCode !== null ? iconCode : (isDay ? 1 : 33);
@@ -119,7 +119,7 @@ const getTimeAgoString = (timestampSeconds) => {
 // ==========================================
 
 // Адаптер: The Weather Company (TWC aggcommon)[cite: 2]
-const adaptTwcData = (raw) => {
+const adaptTwcData = (raw, pwsStationInfo = null) => {
   const currentRaw = raw["v3-wx-observations-current"] || {};
   const hourlyRaw = raw["v3-wx-forecast-hourly-1day"] || {};
   const dailyRaw = raw["v3-wx-forecast-daily-15day"] || {};
@@ -152,6 +152,7 @@ const adaptTwcData = (raw) => {
     visibility: Math.round(currentRaw.visibility ?? 10)
   };
 
+  // Метеостанция из v2obs формируется всегда
   let stationInfo = null;
   if (obsData && obsData.obs_name) {
     stationInfo = {
@@ -161,6 +162,9 @@ const adaptTwcData = (raw) => {
       updated: getTimeAgoString(obsData.valid_time_gmt)
     };
   }
+
+  // Данные PWS сохраняются отдельным объектом
+  const pwsInfo = pwsStationInfo;
 
   const hourly = [];
   const hTimes = hourlyRaw.validTimeLocal || [];
@@ -244,7 +248,7 @@ const adaptTwcData = (raw) => {
     });
   }
 
-  return { alertText, current, stationInfo, hourly, daily };
+  return { alertText, current, stationInfo, pwsInfo, hourly, daily };
 };
 
 // Адаптер: AccuWeather[cite: 2]
@@ -276,6 +280,7 @@ const adaptAccuWeatherData = (currentConditionsRaw, hourlyRaw, dailyRaw) => {
   };
 
   const stationInfo = null;
+  const pwsInfo = null;
 
   const hourly = (Array.isArray(hourlyRaw) ? hourlyRaw.slice(0, 24) : []).map(h => {
     const rain = h.Rain?.Value ?? 0;
@@ -342,7 +347,60 @@ const adaptAccuWeatherData = (currentConditionsRaw, hourlyRaw, dailyRaw) => {
     };
   });
 
-  return { alertText, current, stationInfo, hourly, daily };
+  return { alertText, current, stationInfo, pwsInfo, hourly, daily };
+};
+
+// Функция последовательного опроса PWS станций
+const fetchNearestPwsObservations = async (lat, lon, apiKey) => {
+  try {
+    const nearUrl = `https://api.weather.com/v3/location/near?geocode=${lat},${lon}&product=pws&format=json&apiKey=${apiKey}`;
+    const nearRes = await fetch(nearUrl);
+    if (!nearRes.ok) return null;
+    const nearData = await nearRes.json();
+
+    const stationIds = nearData?.location?.stationId || [];
+    const distancesKm = nearData?.location?.distanceKm || [];
+
+    if (!Array.isArray(stationIds) || stationIds.length === 0) {
+      return null;
+    }
+
+    // Опрашиваем станции по очереди, пока не найдём станцию с валидной температурой
+    for (let i = 0; i < stationIds.length; i++) {
+      const stationId = stationIds[i];
+      // Расстояние округляется до целого числа
+      const rawDist = distancesKm[i];
+      const dist = rawDist !== undefined && rawDist !== null ? `${Math.round(Number(rawDist))} км` : null;
+
+      if (!stationId) continue;
+
+      try {
+        const obsUrl = `https://api.weather.com/v2/pws/observations/current?stationId=${encodeURIComponent(stationId)}&format=json&units=m&numericPrecision=decimal&apiKey=${apiKey}`;
+        const obsRes = await fetch(obsUrl);
+        if (!obsRes.ok) continue;
+
+        const obsData = await obsRes.json();
+        const obs = obsData?.observations?.[0];
+        const temp = obs?.metric?.temp;
+
+        // Если температура присутствует и валидна, округляем до 1 знака после запятой
+        if (temp !== null && temp !== undefined && !isNaN(temp)) {
+          return {
+            stationId: stationId,
+            temp: `${Number(temp).toFixed(1)}°`,
+            updated: getTimeAgoString(obs.epoch),
+            distance: dist
+          };
+        }
+      } catch {
+        // При ошибке переходим к следующей станции
+        continue;
+      }
+    }
+  } catch (err) {
+    console.warn("PWS fetch error:", err);
+  }
+  return null;
 };
 
 // ==========================================
@@ -364,7 +422,7 @@ export default function App() {
   const [cityQuery, setCityQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
 
-  // Город по умолчанию
+  // Город по умолчанию[cite: 2]
   const [defaultCity, setDefaultCity] = useState(() => {
     try {
       const saved = localStorage.getItem('twc_default_city');
@@ -376,7 +434,7 @@ export default function App() {
 
   const [coords, setCoords] = useState(defaultCity);
 
-  // Избранные города
+  // Избранные города[cite: 2]
   const [favorites, setFavorites] = useState(() => {
     try {
       const saved = localStorage.getItem('twc_favorite_cities');
@@ -559,6 +617,11 @@ export default function App() {
                     qpfRain: [0, 0, 1.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
                   }]
                 }
+              }, {
+                stationId: "ILOCAL12",
+                temp: "12.4°",
+                updated: "10 мин назад",
+                distance: "1 км"
               }));
               setIsMock(true);
               setLoading(false);
@@ -568,12 +631,17 @@ export default function App() {
         }
 
         try {
-          const url = `https://api.weather.com/v3/aggcommon/v3-wx-observations-current;v2obs;v3-wx-forecast-daily-15day;v3-wx-forecast-hourly-1day;v3-insights?geocode=${coords.lat},${coords.lon}&insightType=all&language=ru&format=json&units=m&apiKey=${twcKey}`;
-          const res = await fetch(url);
-          if (!res.ok) throw new Error(`TWC API вернул код ${res.status}`);
-          const json = await res.json();
+          const aggUrl = `https://api.weather.com/v3/aggcommon/v3-wx-observations-current;v2obs;v3-wx-forecast-daily-15day;v3-wx-forecast-hourly-1day;v3-insights?geocode=${coords.lat},${coords.lon}&insightType=all&language=ru&format=json&units=m&apiKey=${twcKey}`;
+          
+          const [aggRes, pwsData] = await Promise.all([
+            fetch(aggUrl),
+            fetchNearestPwsObservations(coords.lat, coords.lon, twcKey)
+          ]);
+
+          if (!aggRes.ok) throw new Error(`TWC API вернул код ${aggRes.status}`);
+          const json = await aggRes.json();
           if (!isCancelled) {
-            setNormalizedData(adaptTwcData(json));
+            setNormalizedData(adaptTwcData(json, pwsData));
             setIsMock(false);
           }
         } catch (err) {
@@ -683,7 +751,7 @@ export default function App() {
     return () => { isCancelled = true; };
   }, [coords, provider, twcKey, accuKey]);
 
-  // Вычисление глобального минимума и максимума температур за весь период прогноза (Apple Weather style)
+  // Вычисление глобального минимума и максимума температур за весь период прогноза (Apple Weather style)[cite: 2]
   const forecastExtremes = useMemo(() => {
     if (!normalizedData?.daily || normalizedData.daily.length === 0) {
       return { overallMin: 0, overallMax: 25 };
@@ -700,7 +768,7 @@ export default function App() {
     };
   }, [normalizedData]);
 
-  const { alertText, current, stationInfo, hourly, daily } = normalizedData || {};
+  const { alertText, current, stationInfo, pwsInfo, hourly, daily } = normalizedData || {};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white font-sans antialiased pb-10 selection:bg-cyan-500 selection:text-white">
@@ -1036,16 +1104,32 @@ export default function App() {
                 </div>
               )}
 
-              {/* Метеостанция: ТОЛЬКО ДЛЯ THE WEATHER COMPANY[cite: 2] */}
-              {provider === 'twc' && stationInfo && (
-                <div className="mt-2.5 pt-2 border-t border-white/10 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-300 leading-tight">
-                  <span className="flex items-center gap-1 text-cyan-300 font-medium">
-                    <Radio size={12} className="text-cyan-400" />                    
-                  </span>
-                  <span className="text-white font-semibold">{stationInfo.name}</span>
-                  {stationInfo.temp && <span>• {stationInfo.temp}</span>}
-                  {stationInfo.phrase && <span>• {stationInfo.phrase}</span>}
-                  <span className="text-slate-400">• {stationInfo.updated}</span>
+              {/* Блок станций ТОЛЬКО ДЛЯ THE WEATHER COMPANY */}
+              {provider === 'twc' && (stationInfo || pwsInfo) && (
+                <div className="mt-2.5 pt-2 border-t border-white/10 flex flex-col gap-1 text-xs text-slate-300 leading-tight">
+                  {/* Основная станция из v2obs (выводится всегда) */}
+                  {stationInfo && (
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span className="flex items-center gap-1 text-cyan-300 font-medium">
+                        <Radio size={12} className="text-cyan-400" />
+                      </span>
+                      <span className="text-white font-semibold">{stationInfo.name}</span>
+                      {stationInfo.temp && <span>• {stationInfo.temp}</span>}
+                      {stationInfo.phrase && <span>• {stationInfo.phrase}</span>}
+                      <span className="text-slate-400">• {stationInfo.updated}</span>
+                    </div>
+                  )}
+
+                  {/* Ближайшая PWS станция (выводится ниже) */}
+                  {pwsInfo && (
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-slate-300">
+                      <span className="text-cyan-300 font-medium">PWS:</span>
+                      <span className="text-white font-semibold">{pwsInfo.stationId}</span>
+                      <span>• {pwsInfo.temp}</span>
+                      <span>• {pwsInfo.updated}</span>
+                      {pwsInfo.distance && <span>• {pwsInfo.distance}</span>}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1148,7 +1232,7 @@ export default function App() {
               </div>
             </section>
 
-            {/* 3. Прогноз на 15 дней (с динамическим распределением диапазона как в Apple Weather) */}
+            {/* 3. Прогноз на 15 дней (с динамическим распределением диапазона как в Apple Weather)[cite: 2] */}
             <section className="rounded-2xl bg-white/5 border border-white/15 backdrop-blur-xl p-3 sm:p-4 shadow-lg">
               <div className="flex items-center justify-between mb-2.5">
                 <div className="flex items-center gap-1.5">
@@ -1169,13 +1253,13 @@ export default function App() {
                   const dayPrecipBg = getPrecipitationStyle(dItem.day.rain, dItem.day.snow, dItem.day.ice, dItem.day.total);
                   const nightPrecipBg = getPrecipitationStyle(dItem.night.rain, dItem.night.snow, dItem.night.ice, dItem.night.total);
 
-                  // Расчет положения отрезка дня относительно всего периода прогноза (Apple Weather style)
+                  // Расчет положения отрезка дня относительно всего периода прогноза (Apple Weather style)[cite: 2]
                   const totalSpan = forecastExtremes.overallMax - forecastExtremes.overallMin;
                   const leftPercent = Math.max(0, Math.min(100, ((dItem.minTemp - forecastExtremes.overallMin) / totalSpan) * 100));
                   const rightPercent = Math.max(0, Math.min(100, ((dItem.maxTemp - forecastExtremes.overallMin) / totalSpan) * 100));
                   const widthPercent = Math.max(5, rightPercent - leftPercent);
                   
-                  // Адаптивные цвета градиента для текущего отрезка
+                  // Адаптивные цвета градиента для текущего отрезка[cite: 2]
                   const minColor = getTempColor(dItem.minTemp);
                   const maxColor = getTempColor(dItem.maxTemp);
 
@@ -1184,7 +1268,7 @@ export default function App() {
                       key={dayIdx}
                       className="p-2.5 sm:p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all flex flex-col gap-2"
                     >
-                      {/* Шапка дня с распределенным баром */}
+                      {/* Шапка дня с распределенным баром[cite: 2] */}
                       <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-1.5">
                         <div className="flex items-center gap-2">
                           <span className={`text-sm sm:text-base font-bold min-w-16 ${dayIdx === 0 ? 'text-cyan-400' : 'text-white'}`}>
@@ -1200,7 +1284,7 @@ export default function App() {
                             {dItem.minTemp}°
                           </span>
 
-                          {/* Фоновый трек шкалы со смещением отрезка относительно всех дней */}
+                          {/* Фоновый трек шкалы со смещением отрезка относительно всех дней[cite: 2] */}
                           <div className="relative flex-1 h-1.5 sm:h-2 bg-white/10 rounded-full overflow-hidden">
                             <div
                               className="absolute top-0 bottom-0 rounded-full transition-all duration-300 shadow-sm"
@@ -1370,7 +1454,7 @@ export default function App() {
             </div>
 
             <p className="text-xs text-slate-300 mb-3 leading-snug">
-              Ключи сохраняются локально или считываются из <code>.env</code> (переменные <code>VITE_TWC_API_KEY</code> и <code>VITE_ACCU_API_KEY</code>).
+              Ключи сохраняются локально или считываются из <code>.env</code> (переменные <code>VITE_TWC_API_KEY</code> и <code>VITE_ACCU_API_KEY</code>).[cite: 2]
             </p>
 
             <div className="space-y-3">
