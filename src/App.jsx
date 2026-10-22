@@ -9,7 +9,7 @@ import {
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ И КОМПОНЕНТЫ
 // ==========================================
 
-// Стрелка направления ветра (+180°: откуда дует)
+// Стрелка направления ветра с компенсацией угла начального положения
 const WindArrow = ({ deg = 0, size = 12, className = "" }) => (
   <Navigation
     size={size}
@@ -39,18 +39,18 @@ const WeatherIcon = ({ iconCode, isDay = true, provider = "twc", size = 24, clas
   );
 };
 
-// Функция адаптивного цвета температуры в диапазоне от -60°C до +60°C
+// Функция адаптивного цвета температуры в диапазоне от -60°C до +60°C[cite: 2]
 const getTempColor = (temp) => {
   const clamped = Math.max(-60, Math.min(60, temp));
   const stops = [
-    { t: -60, r: 147, g: 51,  b: 234 }, // Фиолетовый (-60)
-    { t: -30, r: 59,  g: 130, b: 246 }, // Глубокий синий (-30)
-    { t: -10, r: 6,   g: 182, b: 212 }, // Голубой/бирюзовый (-10)
-    { t: 0,   r: 16,  g: 185, b: 129 }, // Зеленовато-бирюзовый (0)
-    { t: 15,  r: 132, g: 204, b: 22  }, // Салатово-зеленый (+15)
-    { t: 25,  r: 234, g: 179, b: 8   }, // Желто-золотой (+25)
-    { t: 38,  r: 249, g: 115, b: 22  }, // Оранжевый (+38)
-    { t: 60,  r: 220, g: 38,  b: 38  }  // Сильно красный (+60)
+    { t: -60, r: 147, g: 51,  b: 234 }, // Фиолетовый (-60)[cite: 2]
+    { t: -30, r: 59,  g: 130, b: 246 }, // Глубокий синий (-30)[cite: 2]
+    { t: -10, r: 6,   g: 182, b: 212 }, // Голубой/бирюзовый (-10)[cite: 2]
+    { t: 0,   r: 16,  g: 185, b: 129 }, // Зеленовато-бирюзовый (0)[cite: 2]
+    { t: 15,  r: 132, g: 204, b: 22  }, // Салатово-зеленый (+15)[cite: 2]
+    { t: 25,  r: 234, g: 179, b: 8   }, // Желто-золотой (+25)[cite: 2]
+    { t: 38,  r: 249, g: 115, b: 22  }, // Оранжевый (+38)[cite: 2]
+    { t: 60,  r: 220, g: 38,  b: 38  }  // Сильно красный (+60)[cite: 2]
   ];
 
   for (let i = 0; i < stops.length - 1; i++) {
@@ -67,7 +67,7 @@ const getTempColor = (temp) => {
   return clamped > 0 ? "rgb(220, 38, 38)" : "rgb(147, 51, 234)";
 };
 
-// Стиль заливки карточки при осадках
+// Стиль заливки карточки при осадках[cite: 2]
 const getPrecipitationStyle = (rain = 0, snow = 0, ice = 0, total = 0) => {
   const r = Number(rain) || 0;
   const s = Number(snow) || 0;
@@ -83,7 +83,7 @@ const getPrecipitationStyle = (rain = 0, snow = 0, ice = 0, total = 0) => {
   return "bg-white/5 border-white/10";
 };
 
-// Форматирование осадков: rain (мм), snow (см), ice (мм), total (мм)
+// Форматирование осадков: rain (мм), snow (см), ice (мм), total (мм)[cite: 2]
 const formatPrecipDetails = (rain = 0, snow = 0, ice = 0, total = 0) => {
   const parts = [];
   const r = Number(rain) || 0;
@@ -102,7 +102,7 @@ const formatPrecipDetails = (rain = 0, snow = 0, ice = 0, total = 0) => {
   return parts.length > 0 ? parts.join(" ") : null;
 };
 
-// Время назад
+// Время назад[cite: 2]
 const getTimeAgoString = (timestampSeconds) => {
   if (!timestampSeconds) return "недавно";
   const nowSeconds = Math.floor(Date.now() / 1000);
@@ -118,7 +118,7 @@ const getTimeAgoString = (timestampSeconds) => {
 // АДАПТЕРЫ ДАННЫХ
 // ==========================================
 
-// Адаптер: The Weather Company (TWC aggcommon)
+// Адаптер: The Weather Company (TWC aggcommon)[cite: 2]
 const adaptTwcData = (raw) => {
   const currentRaw = raw["v3-wx-observations-current"] || {};
   const hourlyRaw = raw["v3-wx-forecast-hourly-1day"] || {};
@@ -202,14 +202,24 @@ const adaptTwcData = (raw) => {
     const nIce = dp.qpfIce?.[nIdx] ?? 0;
     const nTotal = dp.qpf?.[nIdx] ?? 0;
 
+    const maxTemp = dailyRaw.temperatureMax?.[i] !== undefined && dailyRaw.temperatureMax?.[i] !== null
+      ? Math.round(dailyRaw.temperatureMax[i])
+      : Math.round(dailyRaw.calendarDayTemperatureMax?.[i] ?? 0);
+
+    const minTemp = dailyRaw.temperatureMin?.[i] !== undefined && dailyRaw.temperatureMin?.[i] !== null
+      ? Math.round(dailyRaw.temperatureMin[i])
+      : Math.round(dailyRaw.calendarDayTemperatureMin?.[i] ?? 0);
+
     daily.push({
       timeStr: dTimes[i],
       dayName: dailyRaw.dayOfWeek?.[i] || "",
-      maxTemp: Math.round(dailyRaw.calendarDayTemperatureMax?.[i] ?? 0),
-      minTemp: Math.round(dailyRaw.calendarDayTemperatureMin?.[i] ?? 0),
+      maxTemp,
+      minTemp,
       day: {
         iconCode: dp.iconCode?.[dIdx] ?? 44,
-        temp: dp.temperature?.[dIdx] !== null && dp.temperature?.[dIdx] !== undefined ? Math.round(dp.temperature[dIdx]) : Math.round(dailyRaw.calendarDayTemperatureMax?.[i] ?? 0),
+        temp: dp.temperature?.[dIdx] !== null && dp.temperature?.[dIdx] !== undefined 
+          ? Math.round(dp.temperature[dIdx]) 
+          : maxTemp,
         phrase: dp.wxPhraseLong?.[dIdx] || "--",
         pop: dp.precipChance?.[dIdx] ?? 0,
         rain: dRain, snow: dSnow, ice: dIce, total: dTotal,
@@ -220,7 +230,9 @@ const adaptTwcData = (raw) => {
       },
       night: {
         iconCode: dp.iconCode?.[nIdx] ?? 44,
-        temp: dp.temperature?.[nIdx] !== null && dp.temperature?.[nIdx] !== undefined ? Math.round(dp.temperature[nIdx]) : Math.round(dailyRaw.calendarDayTemperatureMin?.[i] ?? 0),
+        temp: dp.temperature?.[nIdx] !== null && dp.temperature?.[nIdx] !== undefined 
+          ? Math.round(dp.temperature[nIdx]) 
+          : minTemp,
         phrase: dp.wxPhraseLong?.[nIdx] || "--",
         pop: dp.precipChance?.[nIdx] ?? 0,
         rain: nRain, snow: nSnow, ice: nIce, total: nTotal,
@@ -235,7 +247,7 @@ const adaptTwcData = (raw) => {
   return { alertText, current, stationInfo, hourly, daily };
 };
 
-// Адаптер: AccuWeather
+// Адаптер: AccuWeather[cite: 2]
 const adaptAccuWeatherData = (currentConditionsRaw, hourlyRaw, dailyRaw) => {
   const alertText = dailyRaw?.Headline?.Text || null;
 
@@ -384,7 +396,7 @@ export default function App() {
 
   const hourlyScrollRef = useRef(null);
 
-  // Запрос геолокации при первом старте
+  // Определение локации при первом старте[cite: 2]
   useEffect(() => {
     const hasVisited = localStorage.getItem('weather_app_visited');
     if (!hasVisited && navigator.geolocation) {
@@ -537,8 +549,10 @@ export default function App() {
                 },
                 "v3-wx-forecast-daily-15day": {
                   validTimeLocal: Array.from({ length: 15 }, (_, i) => `2026-10-${21 + i}T07:00:00+0300`),
-                  calendarDayTemperatureMax: Array(15).fill(13),
-                  calendarDayTemperatureMin: Array(15).fill(7),
+                  calendarDayTemperatureMax: [14, 14, 13, 12, 14, 12, 12, 12, 12, 11, 10, 10, 9, 8, 7],
+                  calendarDayTemperatureMin: [8, 10, 7, 5, 8, 7, 5, 5, 6, 5, 4, 3, 3, 2, 2],
+                  temperatureMax: [14, 14, 11, 12, 14, 12, 12, 12, 12, 11, 10, 10, 9, 8, 7],
+                  temperatureMin: [10, 10, 5, 8, 9, 5, 5, 6, 5, 4, 3, 3, 2, 2, 1],
                   daypart: [{ 
                     iconCode: Array(30).fill(28), 
                     wxPhraseLong: Array(30).fill("Облачно"),
@@ -605,7 +619,7 @@ export default function App() {
                   Headline: { Text: "Ожидаются дожди в конце недели (AccuWeather)" },
                   DailyForecasts: Array.from({ length: 15 }, (_, i) => ({
                     Date: `2026-10-${21 + i}T07:00:00+03:00`,
-                    Temperature: { Maximum: { Value: 13 }, Minimum: { Value: 6 } },
+                    Temperature: { Maximum: { Value: 14 - Math.floor(i / 2) }, Minimum: { Value: 8 - Math.floor(i / 2) } },
                     Day: { 
                       Icon: 7, 
                       LongPhrase: "Преимущественно облачно с кратковременными прояснениями",
@@ -669,16 +683,33 @@ export default function App() {
     return () => { isCancelled = true; };
   }, [coords, provider, twcKey, accuKey]);
 
+  // Вычисление глобального минимума и максимума температур за весь период прогноза (Apple Weather style)
+  const forecastExtremes = useMemo(() => {
+    if (!normalizedData?.daily || normalizedData.daily.length === 0) {
+      return { overallMin: 0, overallMax: 25 };
+    }
+    const allMins = normalizedData.daily.map(d => d.minTemp).filter(n => typeof n === 'number' && !isNaN(n));
+    const allMaxs = normalizedData.daily.map(d => d.maxTemp).filter(n => typeof n === 'number' && !isNaN(n));
+    
+    const overallMin = allMins.length > 0 ? Math.min(...allMins) : 0;
+    const overallMax = allMaxs.length > 0 ? Math.max(...allMaxs) : 25;
+
+    return {
+      overallMin,
+      overallMax: overallMax === overallMin ? overallMax + 1 : overallMax
+    };
+  }, [normalizedData]);
+
   const { alertText, current, stationInfo, hourly, daily } = normalizedData || {};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white font-sans antialiased pb-10 selection:bg-cyan-500 selection:text-white">
       
-      {/* Шапка с адаптацией для мобильных устройств */}
+      {/* Шапка с адаптацией для мобильных устройств[cite: 2] */}
       <header className="sticky top-0 z-30 backdrop-blur-xl bg-slate-900/80 border-b border-white/10 px-2.5 py-1.5 sm:px-6 sm:py-2.5">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-1.5 sm:gap-3">
           
-          {/* Логотип и город */}
+          {/* Логотип и город[cite: 2] */}
           <div className="flex items-center gap-1.5 min-w-0 shrink">
             <div className="p-1 sm:p-1.5 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 shadow-sm shrink-0">
               <Sun className="text-white" size={16} />
@@ -697,7 +728,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Переключатель поставщиков (компактный на мобильных) */}
+          {/* Переключатель поставщиков[cite: 2] */}
           <div className="inline-flex rounded-lg bg-white/10 p-0.5 border border-white/15 shrink-0">
             <button
               onClick={() => handleSwitchProvider('twc')}
@@ -721,7 +752,7 @@ export default function App() {
             </button>
           </div>
 
-          {/* Правый блок: Поиск, Гео, Шестеренка */}
+          {/* Правый блок: Поиск, Гео, Шестеренка[cite: 2] */}
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             <form onSubmit={handleSearchCity} className="relative flex items-center">
               <input
@@ -751,7 +782,6 @@ export default function App() {
               <Compass size={14} />
             </button>
 
-            {/* Шестеренка: гарантированно не сожмется и не вылезет за экран */}
             <button
               onClick={() => setIsSettingsOpen(true)}
               title="Настройки"
@@ -762,7 +792,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Результаты поиска */}
+        {/* Результаты поиска[cite: 2] */}
         {searchResults.length > 0 && (
           <div className="max-w-4xl mx-auto mt-2 bg-slate-900/95 border border-white/20 rounded-xl overflow-hidden shadow-2xl backdrop-blur-2xl">
             {searchResults.map((item, idx) => (
@@ -786,7 +816,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Панель избранных городов */}
+        {/* Панель избранных городов[cite: 2] */}
         {favorites.length > 0 && (
           <div className="max-w-4xl mx-auto mt-1.5 pt-1 border-t border-white/10 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
             <span className="text-xs text-slate-400 font-medium shrink-0 flex items-center gap-1 mr-0.5">
@@ -821,7 +851,7 @@ export default function App() {
         )}
       </header>
 
-      {/* Оповещения */}
+      {/* Оповещения[cite: 2] */}
       <div className="max-w-4xl mx-auto px-3 sm:px-6 pt-2">
         {isMock && (
           <div className="mb-2 px-3 py-1.5 rounded-xl bg-cyan-950/40 border border-cyan-400/30 text-cyan-200 text-xs flex items-center justify-between gap-2">
@@ -845,7 +875,7 @@ export default function App() {
         )}
       </div>
 
-      {/* Основной контент */}
+      {/* Основной контент[cite: 2] */}
       <main className="max-w-4xl mx-auto px-3 sm:px-6 space-y-3">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 text-slate-400">
@@ -854,20 +884,18 @@ export default function App() {
           </div>
         ) : normalizedData ? (
           <>
-            {/* 1. Блок текущей погоды */}
+            {/* 1. Блок текущей погоды[cite: 2] */}
             <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-white/10 via-white/5 to-white/[0.02] border border-white/20 backdrop-blur-2xl p-4 sm:p-5 shadow-lg">
               
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1.5">
                     
-                    {/* 2. ИСПРАВЛЕНИЕ: надпись с именем поставщика без слова "Сейчас" */}
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-xs font-medium leading-tight">
                       <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
                       {provider === 'twc' ? 'Weather.com' : 'AccuWeather'}
                     </span>
 
-                    {/* 1. ИСПРАВЛЕНИЕ: только звёздочка без текста */}
                     <button
                       onClick={toggleFavorite}
                       className={`p-1 rounded-full border transition-all active:scale-95 ${
@@ -907,10 +935,10 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Сетка условий: 2 ряда по 3 карточки */}
+              {/* Сетка условий: 2 ряда по 3 карточки[cite: 2] */}
               <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mt-3.5 pt-3.5 border-t border-white/10">
                 
-                {/* Ветер */}
+                {/* Ветер[cite: 2] */}
                 <div className="bg-white/5 border border-white/10 rounded-xl p-2 flex flex-col justify-between">
                   <div className="flex items-center justify-between text-slate-400 mb-0.5">
                     <span className="text-xs font-medium">Ветер</span>
@@ -925,7 +953,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Влажность */}
+                {/* Влажность[cite: 2] */}
                 <div className="bg-white/5 border border-white/10 rounded-xl p-2 flex flex-col justify-between">
                   <div className="flex items-center justify-between text-slate-400 mb-0.5">
                     <span className="text-xs font-medium">Влажность</span>
@@ -939,7 +967,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Давление */}
+                {/* Давление[cite: 2] */}
                 <div className="bg-white/5 border border-white/10 rounded-xl p-2 flex flex-col justify-between">
                   <div className="flex items-center justify-between text-slate-400 mb-0.5">
                     <span className="text-xs font-medium">Давление</span>
@@ -953,7 +981,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* УФ-индекс */}
+                {/* УФ-индекс[cite: 2] */}
                 <div className="bg-white/5 border border-white/10 rounded-xl p-2 flex flex-col justify-between">
                   <div className="flex items-center justify-between text-slate-400 mb-0.5">
                     <span className="text-xs font-medium">УФ-индекс</span>
@@ -970,7 +998,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Видимость */}
+                {/* Видимость[cite: 2] */}
                 <div className="bg-white/5 border border-white/10 rounded-xl p-2 flex flex-col justify-between">
                   <div className="flex items-center justify-between text-slate-400 mb-0.5">
                     <span className="text-xs font-medium">Видимость</span>
@@ -984,7 +1012,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Карточка: Ощущается */}
+                {/* Карточка: Ощущается[cite: 2] */}
                 <div className="bg-white/5 border border-white/10 rounded-xl p-2 flex flex-col justify-between">
                   <div className="flex items-center justify-between text-slate-400 mb-0.5">
                     <span className="text-xs font-medium">Ощущ.</span>
@@ -1000,7 +1028,7 @@ export default function App() {
 
               </div>
 
-              {/* Предупреждение / Headline */}
+              {/* Предупреждение / Headline[cite: 2] */}
               {alertText && (
                 <div className="mt-2.5 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-400/30 text-amber-200 text-xs sm:text-sm flex items-center gap-2 shadow-sm">
                   <BellRing size={15} className="shrink-0 text-amber-400 animate-pulse" />
@@ -1008,7 +1036,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* Метеостанция: ТОЛЬКО ДЛЯ THE WEATHER COMPANY */}
+              {/* Метеостанция: ТОЛЬКО ДЛЯ THE WEATHER COMPANY[cite: 2] */}
               {provider === 'twc' && stationInfo && (
                 <div className="mt-2.5 pt-2 border-t border-white/10 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-300 leading-tight">
                   <span className="flex items-center gap-1 text-cyan-300 font-medium">
@@ -1023,7 +1051,7 @@ export default function App() {
 
             </section>
 
-            {/* 2. Почасовой прогноз */}
+            {/* 2. Почасовой прогноз[cite: 2] */}
             <section className="rounded-2xl bg-white/5 border border-white/15 backdrop-blur-xl p-3 sm:p-4 shadow-lg">
               <div className="flex items-center justify-between mb-2.5">
                 <div className="flex items-center gap-1.5">
@@ -1049,7 +1077,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Горизонтальный скролл */}
+              {/* Горизонтальный скролл[cite: 2] */}
               <div
                 ref={hourlyScrollRef}
                 className="flex gap-2 overflow-x-auto pb-1.5 pt-0.5 no-scrollbar scroll-smooth"
@@ -1081,7 +1109,7 @@ export default function App() {
                         {h.temperature}°
                       </span>
 
-                      {/* Защита от переполнения текста */}
+                      {/* Защита от переполнения текста[cite: 2] */}
                       <div className="w-full h-8 flex items-center justify-center my-0.5 overflow-hidden">
                         <span 
                           className="text-[11px] text-slate-300 text-center line-clamp-2 leading-tight break-words px-0.5"
@@ -1091,14 +1119,14 @@ export default function App() {
                         </span>
                       </div>
 
-                      {/* Ветер */}
+                      {/* Ветер[cite: 2] */}
                       <div className="w-full mt-1 pt-1 border-t border-white/10 flex items-center justify-center gap-1 text-xs text-cyan-200 font-medium">
                         <WindArrow deg={h.windDirection} size={10} className="text-cyan-400" />
                         <span>{h.windDirectionCardinal}</span>
                         <span className="text-slate-300 font-normal">{h.windSpeed}</span>
                       </div>
 
-                      {/* Осадки */}
+                      {/* Осадки[cite: 2] */}
                       <div className="w-full mt-1 flex flex-col items-center justify-center text-xs leading-tight text-center">
                         {h.precipChance > 0 ? (
                           <span className={`flex items-center gap-0.5 ${h.precipChance >= 40 ? 'text-blue-300 font-semibold' : 'text-slate-300'}`}>
@@ -1120,7 +1148,7 @@ export default function App() {
               </div>
             </section>
 
-            {/* 3. Прогноз на 15 дней (с адаптивной цветной шкалой от -60 до +60) */}
+            {/* 3. Прогноз на 15 дней (с динамическим распределением диапазона как в Apple Weather) */}
             <section className="rounded-2xl bg-white/5 border border-white/15 backdrop-blur-xl p-3 sm:p-4 shadow-lg">
               <div className="flex items-center justify-between mb-2.5">
                 <div className="flex items-center gap-1.5">
@@ -1141,11 +1169,13 @@ export default function App() {
                   const dayPrecipBg = getPrecipitationStyle(dItem.day.rain, dItem.day.snow, dItem.day.ice, dItem.day.total);
                   const nightPrecipBg = getPrecipitationStyle(dItem.night.rain, dItem.night.snow, dItem.night.ice, dItem.night.total);
 
-                  // 3. ИСПРАВЛЕНИЕ: Расчет диапазона от -60°C до +60°C (всего 120 градусов)
-                  const minPercent = Math.max(0, Math.min(100, ((dItem.minTemp - (-60)) / 120) * 100));
-                  const maxPercent = Math.max(0, Math.min(100, ((dItem.maxTemp - (-60)) / 120) * 100));
+                  // Расчет положения отрезка дня относительно всего периода прогноза (Apple Weather style)
+                  const totalSpan = forecastExtremes.overallMax - forecastExtremes.overallMin;
+                  const leftPercent = Math.max(0, Math.min(100, ((dItem.minTemp - forecastExtremes.overallMin) / totalSpan) * 100));
+                  const rightPercent = Math.max(0, Math.min(100, ((dItem.maxTemp - forecastExtremes.overallMin) / totalSpan) * 100));
+                  const widthPercent = Math.max(5, rightPercent - leftPercent);
                   
-                  // Получение цветов краев температурного отрезка
+                  // Адаптивные цвета градиента для текущего отрезка
                   const minColor = getTempColor(dItem.minTemp);
                   const maxColor = getTempColor(dItem.maxTemp);
 
@@ -1154,7 +1184,7 @@ export default function App() {
                       key={dayIdx}
                       className="p-2.5 sm:p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all flex flex-col gap-2"
                     >
-                      {/* Шапка дня с адаптивной цветной шкалой от -60 до +60 */}
+                      {/* Шапка дня с распределенным баром */}
                       <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-1.5">
                         <div className="flex items-center gap-2">
                           <span className={`text-sm sm:text-base font-bold min-w-16 ${dayIdx === 0 ? 'text-cyan-400' : 'text-white'}`}>
@@ -1170,13 +1200,13 @@ export default function App() {
                             {dItem.minTemp}°
                           </span>
 
-                          {/* Фоновый трек шкалы (-60 до +60) с адаптивным цветным градиентом */}
-                          <div className="relative flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+                          {/* Фоновый трек шкалы со смещением отрезка относительно всех дней */}
+                          <div className="relative flex-1 h-1.5 sm:h-2 bg-white/10 rounded-full overflow-hidden">
                             <div
                               className="absolute top-0 bottom-0 rounded-full transition-all duration-300 shadow-sm"
                               style={{
-                                left: `${minPercent}%`,
-                                width: `${Math.max(4, maxPercent - minPercent)}%`,
+                                left: `${leftPercent}%`,
+                                width: `${widthPercent}%`,
                                 background: `linear-gradient(to right, ${minColor}, ${maxColor})`
                               }}
                             />
@@ -1188,10 +1218,10 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Горизонтальный ряд: Блок День и Блок Ночь */}
+                      {/* Горизонтальный ряд: Блок День и Блок Ночь[cite: 2] */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         
-                        {/* ДЕНЬ */}
+                        {/* ДЕНЬ[cite: 2] */}
                         <div className={`flex items-start justify-between gap-2 rounded-xl p-2.5 border transition-colors ${dayPrecipBg}`}>
                           <div className="flex items-start gap-2.5 min-w-0">
                             
@@ -1239,7 +1269,7 @@ export default function App() {
                           )}
                         </div>
 
-                        {/* НОЧЬ */}
+                        {/* НОЧЬ[cite: 2] */}
                         <div className={`flex items-start justify-between gap-2 rounded-xl p-2.5 border transition-colors ${nightPrecipBg}`}>
                           <div className="flex items-start gap-2.5 min-w-0">
                             
@@ -1297,7 +1327,7 @@ export default function App() {
         ) : null}
       </main>
 
-      {/* Модальное окно настроек */}
+      {/* Модальное окно настроек[cite: 2] */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
           <div className="w-full max-w-sm bg-slate-900 border border-white/20 rounded-2xl p-5 shadow-2xl">
@@ -1314,7 +1344,7 @@ export default function App() {
               </button>
             </div>
 
-            {/* Выбор города по умолчанию */}
+            {/* Выбор города по умолчанию[cite: 2] */}
             <div className="mb-4 pb-3 border-b border-white/10">
               <label className="text-xs font-semibold text-slate-300 block mb-1.5">
                 Город по умолчанию при старте:
