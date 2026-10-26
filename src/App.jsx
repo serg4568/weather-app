@@ -3,7 +3,7 @@ import {
   Search, MapPin, RefreshCw, AlertCircle, Settings, X, ChevronRight,
   ChevronLeft, Sun, Wind, Droplets, Eye, Gauge, Compass, Thermometer,
   Navigation, Star, Radio, BellRing, Check,
-  CloudRain, CloudSnow, CloudHail
+  CloudRain, CloudSnow, CloudHail, Snowflake, Droplet, Sparkles
 } from 'lucide-react';
 
 // ==========================================
@@ -97,7 +97,7 @@ const PrecipDisplay = ({ rain = 0, snow = 0, ice = 0, total = 0 }) => {
   if (r > 0) {
     items.push({
       id: 'rain',
-      icon: <CloudRain size={9} className="text-blue-300 shrink-0" />,
+      icon: <Droplet size={9} className="text-blue-300 shrink-0" />,
       text: `${r.toFixed(1)} мм`
     });
   }
@@ -106,7 +106,7 @@ const PrecipDisplay = ({ rain = 0, snow = 0, ice = 0, total = 0 }) => {
   if (s > 0) {
     items.push({
       id: 'snow',
-      icon: <CloudSnow size={9} className="text-zinc-400 shrink-0" />,
+      icon: <Snowflake size={9} className="text-zinc-400 shrink-0" />,
       text: `${s.toFixed(1)} см`
     });
   }
@@ -115,7 +115,7 @@ const PrecipDisplay = ({ rain = 0, snow = 0, ice = 0, total = 0 }) => {
   if (i > 0) {
     items.push({
       id: 'ice',
-      icon: <CloudHail size={9} className="text-fuchsia-400 shrink-0" />,
+      icon: <Sparkles size={9} className="text-fuchsia-400 shrink-0" />,
       text: `${i.toFixed(1)} мм`
     });
   }
