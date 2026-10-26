@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Search, MapPin, RefreshCw, AlertCircle, Settings, X, ChevronRight,
   ChevronLeft, Sun, Wind, Droplets, Eye, Gauge, Compass, Thermometer,
-  Navigation, Star, Radio, BellRing, Check
+  Navigation, Star, Radio, BellRing, Check,
+  CloudRain, CloudSnow, CloudHail
 } from 'lucide-react';
 
 // ==========================================
@@ -83,23 +84,66 @@ const getPrecipitationStyle = (rain = 0, snow = 0, ice = 0, total = 0) => {
   return "bg-white/5 border-white/10";
 };
 
-// Форматирование осадков: rain (мм), snow (см), ice (мм), total (мм)
-const formatPrecipDetails = (rain = 0, snow = 0, ice = 0, total = 0) => {
-  const parts = [];
+// Компонент вертикального вывода типов осадков друг под другом с мини-иконками (без слов 'лед', 'снег')
+const PrecipDisplay = ({ rain = 0, snow = 0, ice = 0, total = 0 }) => {
   const r = Number(rain) || 0;
   const s = Number(snow) || 0;
   const i = Number(ice) || 0;
   const t = Number(total) || 0;
 
-  if (s > 0) parts.push(`${s.toFixed(1)} см снег`);
-  if (r > 0) parts.push(`${r.toFixed(1)} мм`);
-  if (i > 0) parts.push(`${i.toFixed(1)} мм лед`);
+  const items = [];
 
-  if (parts.length === 0 && t > 0) {
-    parts.push(`${t.toFixed(1)} мм`);
+  // 1. Дождь
+  if (r > 0) {
+    items.push({
+      id: 'rain',
+      icon: <CloudRain size={9} className="text-blue-300 shrink-0" />,
+      text: `${r.toFixed(1)} мм`
+    });
   }
 
-  return parts.length > 0 ? parts.join(" ") : null;
+  // 2. Снег
+  if (s > 0) {
+    items.push({
+      id: 'snow',
+      icon: <CloudSnow size={9} className="text-zinc-400 shrink-0" />,
+      text: `${s.toFixed(1)} см`
+    });
+  }
+
+  // 3. Лед
+  if (i > 0) {
+    items.push({
+      id: 'ice',
+      icon: <CloudHail size={9} className="text-fuchsia-400 shrink-0" />,
+      text: `${i.toFixed(1)} мм`
+    });
+  }
+
+  // 4. Общие осадки (если не было разбивки)
+  if (items.length === 0 && t > 0) {
+    items.push({
+      id: 'total',
+      icon: <Droplets size={8} className="text-blue-300 shrink-0" />,
+      text: `${t.toFixed(1)} мм`
+    });
+  }
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="flex flex-col items-center gap-0.5 mt-0.5">
+      {items.map(item => (
+        <span
+          key={item.id}
+          className="inline-flex items-center gap-0.5 text-[9px] text-cyan-200 font-medium leading-none whitespace-nowrap"
+        >
+          {item.icon}
+          <span>{item.text}</span>
+        </span>
+      ))}
+    </div>
+  );
 };
 
 // Время назад
@@ -180,7 +224,6 @@ const adaptTwcData = (raw, pwsStationInfo = null) => {
       phrase: hourlyRaw.wxPhraseLong?.[i] || "",
       precipChance: hourlyRaw.precipChance?.[i] ?? 0,
       rain, snow, ice, total,
-      precipText: formatPrecipDetails(rain, snow, ice, total),
       windSpeed: Math.round(hourlyRaw.windSpeed?.[i] ?? 0),
       windDirection: hourlyRaw.windDirection?.[i] ?? 0,
       windDirectionCardinal: hourlyRaw.windDirectionCardinal?.[i] || ""
@@ -225,7 +268,6 @@ const adaptTwcData = (raw, pwsStationInfo = null) => {
         phrase: dp.wxPhraseLong?.[dIdx] || "--",
         pop: dp.precipChance?.[dIdx] ?? 0,
         rain: dRain, snow: dSnow, ice: dIce, total: dTotal,
-        precipText: formatPrecipDetails(dRain, dSnow, dIce, dTotal),
         windSpeed: dp.windSpeed?.[dIdx] ? Math.round(dp.windSpeed[dIdx]) : null,
         windDir: dp.windDirection?.[dIdx] ?? 0,
         windCard: dp.windDirectionCardinal?.[dIdx] || ""
@@ -238,7 +280,6 @@ const adaptTwcData = (raw, pwsStationInfo = null) => {
         phrase: dp.wxPhraseLong?.[nIdx] || "--",
         pop: dp.precipChance?.[nIdx] ?? 0,
         rain: nRain, snow: nSnow, ice: nIce, total: nTotal,
-        precipText: formatPrecipDetails(nRain, nSnow, nIce, nTotal),
         windSpeed: dp.windSpeed?.[nIdx] ? Math.round(dp.windSpeed[nIdx]) : null,
         windDir: dp.windDirection?.[nIdx] ?? 0,
         windCard: dp.windDirectionCardinal?.[nIdx] || ""
@@ -249,9 +290,10 @@ const adaptTwcData = (raw, pwsStationInfo = null) => {
   return { alertText, current, stationInfo, pwsInfo, hourly, daily };
 };
 
-// Адаптер: AccuWeather (раздельные поля MinuteCast и Headline)
+// Адаптер: AccuWeather
 const adaptAccuWeatherData = (currentConditionsRaw, hourlyRaw, dailyRaw, minuteCastRaw = null) => {
-  const minuteCastText = minuteCastRaw?.Summary?.Phrase || null;
+  const isSummaryValid = minuteCastRaw?.Summary?.Type !== null && minuteCastRaw?.Summary?.Type !== undefined;
+  const minuteCastText = isSummaryValid ? (minuteCastRaw?.Summary?.Phrase || null) : null;
   const headlineText = dailyRaw?.Headline?.Text || null;
 
   const cur = Array.isArray(currentConditionsRaw) && currentConditionsRaw.length > 0 
@@ -295,7 +337,6 @@ const adaptAccuWeatherData = (currentConditionsRaw, hourlyRaw, dailyRaw, minuteC
       phrase: h.IconPhrase || "",
       precipChance: h.PrecipitationProbability ?? 0,
       rain, snow, ice, total,
-      precipText: formatPrecipDetails(rain, snow, ice, total),
       windSpeed: Math.round(h.Wind?.Speed?.Value ?? 0),
       windDirection: h.Wind?.Direction?.Degrees ?? 0,
       windDirectionCardinal: h.Wind?.Direction?.Localized || ""
@@ -327,7 +368,6 @@ const adaptAccuWeatherData = (currentConditionsRaw, hourlyRaw, dailyRaw, minuteC
         phrase: d.LongPhrase || d.ShortPhrase || d.IconPhrase || "Ясно",
         pop: d.PrecipitationProbability ?? 0,
         rain: dRain, snow: dSnow, ice: dIce, total: dTotal,
-        precipText: formatPrecipDetails(dRain, dSnow, dIce, dTotal),
         windSpeed: d.Wind?.Speed?.Value ? Math.round(d.Wind.Speed.Value) : null,
         windDir: d.Wind?.Direction?.Degrees ?? 0,
         windCard: d.Wind?.Direction?.Localized || ""
@@ -338,7 +378,6 @@ const adaptAccuWeatherData = (currentConditionsRaw, hourlyRaw, dailyRaw, minuteC
         phrase: n.LongPhrase || n.ShortPhrase || n.IconPhrase || "Ясно",
         pop: n.PrecipitationProbability ?? 0,
         rain: nRain, snow: nSnow, ice: nIce, total: nTotal,
-        precipText: formatPrecipDetails(nRain, nSnow, nIce, nTotal),
         windSpeed: n.Wind?.Speed?.Value ? Math.round(n.Wind.Speed.Value) : null,
         windDir: n.Wind?.Direction?.Degrees ?? 0,
         windCard: n.Wind?.Direction?.Localized || ""
@@ -598,7 +637,9 @@ export default function App() {
                     "Преимущественно облачно", "Небольшой кратковременный дождь", "Облачно с прояснениями",
                     "Местами сильный ливень и гроза", "Переменная облачность", "Ясно"
                   ].concat(Array(18).fill("Облачно")),
-                  qpfRain: [0, 1.2, 0, 3.4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                  qpfRain: [0, 1.2, 0, 3.4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                  qpfSnow: [0, 0, 0, 0.8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                  qpfIce: [0, 0, 0, 0.4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
                 },
                 "v3-wx-forecast-daily-15day": {
                   validTimeLocal: Array.from({ length: 15 }, (_, i) => `2026-10-${21 + i}T07:00:00+0300`),
@@ -609,7 +650,9 @@ export default function App() {
                   daypart: [{ 
                     iconCode: Array(30).fill(28), 
                     wxPhraseLong: Array(30).fill("Облачно"),
-                    qpfRain: [0, 0, 1.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                    qpfRain: [0, 0, 1.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    qpfSnow: [0, 0, 0.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    qpfIce: Array(30).fill(0)
                   }]
                 }
               }, {
@@ -676,6 +719,7 @@ export default function App() {
                   IconPhrase: i % 2 === 0 ? "Небольшой кратковременный дождь" : "Облачно",
                   Temperature: { Value: 12 },
                   Rain: { Value: i % 4 === 0 ? 1.4 : 0 },
+                  Snow: { Value: i === 2 ? 1.1 : 0 },
                   Wind: { Speed: { Value: 15 }, Direction: { Degrees: 140, Localized: "ЮВ" } }
                 })),
                 {
@@ -686,7 +730,8 @@ export default function App() {
                     Day: { 
                       Icon: 7, 
                       LongPhrase: "Преимущественно облачно с кратковременными прояснениями",
-                      Rain: { Value: i === 1 ? 2.1 : 0 }
+                      Rain: { Value: i === 1 ? 2.1 : 0 },
+                      Snow: { Value: i === 3 ? 0.9 : 0 }
                     },
                     Night: { 
                       Icon: 35, 
@@ -696,6 +741,7 @@ export default function App() {
                 },
                 {
                   Summary: {
+                    Type: 1,
                     Phrase: "Дождь начнется через 25 мин."
                   }
                 }
@@ -716,7 +762,6 @@ export default function App() {
 
           if (!locationKey) throw new Error("Ключ местоположения не найден в ответе AccuWeather");
 
-          // Параллельный запрос всех данных
           const [currentRes, hourlyRes, dailyRes, minuteRes] = await Promise.all([
             fetch(`https://api.accuweather.com/currentconditions/v1/${locationKey}.json?details=true&apikey=${accuKey}&language=ru`),
             fetch(`https://api.accuweather.com/forecasts/v1/hourly/24hour/${locationKey}.json?apikey=${accuKey}&language=ru&metric=true&details=true`),
@@ -776,7 +821,6 @@ export default function App() {
 
   const { alertText, minuteCastText, headlineText, current, stationInfo, pwsInfo, hourly, daily } = normalizedData || {};
 
-  // Проверка: есть ли предупреждения для отображения
   const hasAlerts = provider === 'twc' 
     ? Boolean(alertText) 
     : Boolean(minuteCastText || headlineText);
@@ -1107,7 +1151,7 @@ export default function App() {
 
               </div>
 
-              {/* Блок предупреждений: для AccuWeather MinuteCast сверху, Headline.Text всегда снизу */}
+              {/* Блок предупреждений: для AccuWeather MinuteCast сверху (если Summary.Type !== null), Headline.Text всегда снизу */}
               {hasAlerts && (
                 <div className="mt-2.5 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-400/30 text-amber-200 text-xs sm:text-sm flex items-start gap-2 shadow-sm">
                   <BellRing size={16} className="shrink-0 text-amber-400 animate-pulse mt-0.5" />
@@ -1238,7 +1282,7 @@ export default function App() {
                         <span className="text-slate-300 font-normal">{h.windSpeed}</span>
                       </div>
 
-                      {/* Осадки */}
+                      {/* Осадки (вертикально друг под другом) */}
                       <div className="w-full mt-1 flex flex-col items-center justify-center text-xs leading-tight text-center">
                         {h.precipChance > 0 ? (
                           <span className={`flex items-center gap-0.5 ${h.precipChance >= 40 ? 'text-blue-300 font-semibold' : 'text-slate-300'}`}>
@@ -1248,11 +1292,12 @@ export default function App() {
                         ) : (
                           <span className="text-slate-500">—</span>
                         )}
-                        {h.precipText && (
-                          <span className="text-cyan-200 font-medium text-xs mt-0.5 truncate max-w-full" title={h.precipText}>
-                            {h.precipText}
-                          </span>
-                        )}
+                        <PrecipDisplay
+                          rain={h.rain}
+                          snow={h.snow}
+                          ice={h.ice}
+                          total={h.total}
+                        />
                       </div>
                     </div>
                   );
@@ -1260,7 +1305,7 @@ export default function App() {
               </div>
             </section>
 
-            {/* 3. Прогноз на 15 дней (с расположением колонок День/Ночь в ряд на мобильных устройствах) */}
+            {/* 3. Прогноз на 15 дней (колонки День/Ночь в ряд на мобильных устройствах) */}
             <section className="rounded-2xl bg-white/5 border border-white/15 backdrop-blur-xl p-3 sm:p-4 shadow-lg">
               <div className="flex items-center justify-between mb-2.5">
                 <div className="flex items-center gap-1.5">
@@ -1356,11 +1401,12 @@ export default function App() {
                                 ) : (
                                   <span className="text-[10px] text-slate-400">0%</span>
                                 )}
-                                {dItem.day.precipText && (
-                                  <span className="text-cyan-200 mt-0.5 font-semibold text-[9px] sm:text-xs whitespace-nowrap">
-                                    {dItem.day.precipText}
-                                  </span>
-                                )}
+                                <PrecipDisplay
+                                  rain={dItem.day.rain}
+                                  snow={dItem.day.snow}
+                                  ice={dItem.day.ice}
+                                  total={dItem.day.total}
+                                />
                               </div>
                             </div>
 
@@ -1405,11 +1451,12 @@ export default function App() {
                                 ) : (
                                   <span className="text-[10px] text-slate-400">0%</span>
                                 )}
-                                {dItem.night.precipText && (
-                                  <span className="text-cyan-200 mt-0.5 font-semibold text-[9px] sm:text-xs whitespace-nowrap">
-                                    {dItem.night.precipText}
-                                  </span>
-                                )}
+                                <PrecipDisplay
+                                  rain={dItem.night.rain}
+                                  snow={dItem.night.snow}
+                                  ice={dItem.night.ice}
+                                  total={dItem.night.total}
+                                />
                               </div>
                             </div>
 
