@@ -21,7 +21,10 @@ const WindArrow = ({ deg = 0, size = 12, className = "" }) => (
 
 // Универсальный рендер PNG-иконки
 const WeatherIcon = ({ iconCode, isDay = true, provider = "twc", size = 24, className = "" }) => {
-  const folder = provider === "accuweather" ? "accuicons" : "weather-icons";
+  let folder = "weather-icons";
+  if (provider === "accuweather") folder = "accuicons";
+  if (provider === "here") folder = "hereicons";
+
   const code = iconCode !== undefined && iconCode !== null ? iconCode : (isDay ? 1 : 33);
   const iconPath = `/${folder}/${code}.png`;
 
@@ -40,18 +43,65 @@ const WeatherIcon = ({ iconCode, isDay = true, provider = "twc", size = 24, clas
   );
 };
 
+// Функция парсинга времени часа строго из строки API (без new Date)
+const getApiHourString = (timeStr) => {
+  if (!timeStr || typeof timeStr !== 'string') return '--:00';
+  const tIndex = timeStr.indexOf('T');
+  if (tIndex !== -1 && timeStr.length >= tIndex + 6) {
+    return timeStr.slice(tIndex + 1, tIndex + 6); // "HH:MM"
+  }
+  return '--:00';
+};
+
+// Месяцы для форматирования даты строго по числам из API
+const RU_MONTHS = ["янв.", "февр.", "мар.", "апр.", "мая", "июн.", "июл.", "авг.", "сент.", "окт.", "нояб.", "дек."];
+const RU_WEEKDAYS = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+
+// Функция форматирования дня и месяца строго из даты API
+const formatApiDateString = (timeStr) => {
+  if (!timeStr || typeof timeStr !== 'string') return '';
+  const datePart = timeStr.includes('T') ? timeStr.split('T')[0] : timeStr;
+  const parts = datePart.split('-');
+  if (parts.length === 3) {
+    const day = parseInt(parts[2], 10);
+    const month = parseInt(parts[1], 10);
+    if (!isNaN(day) && !isNaN(month) && month >= 1 && month <= 12) {
+      return `${day} ${RU_MONTHS[month - 1]}`;
+    }
+  }
+  return datePart;
+};
+
+// Функция получения названия дня недели строго по дате API
+const getApiWeekdayString = (timeStr) => {
+  if (!timeStr || typeof timeStr !== 'string') return '';
+  const datePart = timeStr.includes('T') ? timeStr.split('T')[0] : timeStr;
+  const parts = datePart.split('-').map(Number);
+  if (parts.length === 3) {
+    const y = parts[0];
+    const m = parts[1];
+    const d = parts[2];
+    // Zeller-подобный детерминированный расчет дня недели по григорианскому календарю (0 = вс)
+    const t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+    const adjY = m < 3 ? y - 1 : y;
+    const dayOfWeek = (adjY + Math.floor(adjY / 4) - Math.floor(adjY / 100) + Math.floor(adjY / 400) + t[m - 1] + d) % 7;
+    return RU_WEEKDAYS[dayOfWeek] || '';
+  }
+  return '';
+};
+
 // Функция адаптивного цвета температуры в диапазоне от -60°C до +60°C
 const getTempColor = (temp) => {
   const clamped = Math.max(-60, Math.min(60, temp));
   const stops = [
-    { t: -60, r: 147, g: 51,  b: 234 }, // Фиолетовый (-60)
-    { t: -30, r: 59,  g: 130, b: 246 }, // Глубокий синий (-30)
-    { t: -10, r: 6,   g: 182, b: 212 }, // Голубой/бирюзовый (-10)
-    { t: 0,   r: 16,  g: 185, b: 129 }, // Зеленовато-бирюзовый (0)
-    { t: 15,  r: 132, g: 204, b: 22  }, // Салатово-зеленый (+15)
-    { t: 25,  r: 234, g: 179, b: 8   }, // Желто-золотой (+25)
-    { t: 38,  r: 249, g: 115, b: 22  }, // Оранжевый (+38)
-    { t: 60,  r: 220, g: 38,  b: 38  }  // Сильно красный (+60)
+    { t: -60, r: 147, g: 51,  b: 234 },
+    { t: -30, r: 59,  g: 130, b: 246 },
+    { t: -10, r: 6,   g: 182, b: 212 },
+    { t: 0,   r: 16,  g: 185, b: 129 },
+    { t: 15,  r: 132, g: 204, b: 22  },
+    { t: 25,  r: 234, g: 179, b: 8   },
+    { t: 38,  r: 249, g: 115, b: 22  },
+    { t: 60,  r: 220, g: 38,  b: 38  }
   ];
 
   for (let i = 0; i < stops.length - 1; i++) {
@@ -75,16 +125,12 @@ const getPrecipitationStyle = (rain = 0, snow = 0, ice = 0, total = 0) => {
   const i = Number(ice) || 0;
   const t = Number(total) || 0;
 
-  if (s > 0) {
-    return "bg-sky-500/20 border-sky-400/40 shadow-sm shadow-sky-500/10";
-  }
-  if (r > 0 || i > 0 || t > 0) {
-    return "bg-blue-600/25 border-blue-400/40 shadow-sm shadow-blue-500/10";
-  }
+  if (s > 0) return "bg-sky-500/20 border-sky-400/40 shadow-sm shadow-sky-500/10";
+  if (r > 0 || i > 0 || t > 0) return "bg-blue-600/25 border-blue-400/40 shadow-sm shadow-blue-500/10";
   return "bg-white/5 border-white/10";
 };
 
-// Компонент вертикального вывода типов осадков друг под другом с мини-иконками (без слов 'лед', 'снег')
+// Компонент вертикального вывода типов осадков
 const PrecipDisplay = ({ rain = 0, snow = 0, ice = 0, total = 0 }) => {
   const r = Number(rain) || 0;
   const s = Number(snow) || 0;
@@ -93,7 +139,6 @@ const PrecipDisplay = ({ rain = 0, snow = 0, ice = 0, total = 0 }) => {
 
   const items = [];
 
-  // 1. Дождь
   if (r > 0) {
     items.push({
       id: 'rain',
@@ -102,7 +147,6 @@ const PrecipDisplay = ({ rain = 0, snow = 0, ice = 0, total = 0 }) => {
     });
   }
 
-  // 2. Снег
   if (s > 0) {
     items.push({
       id: 'snow',
@@ -111,7 +155,6 @@ const PrecipDisplay = ({ rain = 0, snow = 0, ice = 0, total = 0 }) => {
     });
   }
 
-  // 3. Лед
   if (i > 0) {
     items.push({
       id: 'ice',
@@ -120,7 +163,6 @@ const PrecipDisplay = ({ rain = 0, snow = 0, ice = 0, total = 0 }) => {
     });
   }
 
-  // 4. Общие осадки (если не было разбивки)
   if (items.length === 0 && t > 0) {
     items.push({
       id: 'total',
@@ -255,9 +297,12 @@ const adaptTwcData = (raw, pwsStationInfo = null) => {
       ? Math.round(dailyRaw.temperatureMin[i])
       : Math.round(dailyRaw.calendarDayTemperatureMin?.[i] ?? 0);
 
+    // День недели берется напрямую из массива TWC API dailyRaw.dayOfWeek
+    const apiDayName = dailyRaw.dayOfWeek?.[i] || getApiWeekdayString(dTimes[i]);
+
     daily.push({
       timeStr: dTimes[i],
-      dayName: dailyRaw.dayOfWeek?.[i] || "",
+      dayName: apiDayName,
       maxTemp,
       minTemp,
       day: {
@@ -359,7 +404,7 @@ const adaptAccuWeatherData = (currentConditionsRaw, hourlyRaw, dailyRaw, minuteC
 
     return {
       timeStr: df.Date,
-      dayName: new Date(df.Date).toLocaleDateString('ru-RU', { weekday: 'short' }),
+      dayName: getApiWeekdayString(df.Date),
       maxTemp: Math.round(df.Temperature?.Maximum?.Value ?? 0),
       minTemp: Math.round(df.Temperature?.Minimum?.Value ?? 0),
       day: {
@@ -441,7 +486,11 @@ const fetchNearestPwsObservations = async (lat, lon, apiKey) => {
 // ГЛАВНЫЙ КОМПОНЕНТ ПРИЛОЖЕНИЯ
 // ==========================================
 export default function App() {
-  const [provider, setProvider] = useState(() => localStorage.getItem('weather_provider') || 'twc');
+  const [provider, setProvider] = useState(() => {
+    const saved = localStorage.getItem('weather_provider');
+    if (saved === 'here') return 'twc';
+    return saved || 'twc';
+  });
 
   const envTwcKey = import.meta.env?.VITE_TWC_API_KEY || '';
   const envAccuKey = import.meta.env?.VITE_ACCU_API_KEY || '';
@@ -643,12 +692,13 @@ export default function App() {
                 },
                 "v3-wx-forecast-daily-15day": {
                   validTimeLocal: Array.from({ length: 15 }, (_, i) => `2026-10-${21 + i}T07:00:00+0300`),
+                  dayOfWeek: ["Ср", "Чт", "Пт", "Сб", "Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс", "Пн", "Вт", "Ср"],
                   calendarDayTemperatureMax: [14, 14, 13, 12, 14, 12, 12, 12, 12, 11, 10, 10, 9, 8, 7],
                   calendarDayTemperatureMin: [8, 10, 7, 5, 8, 7, 5, 5, 6, 5, 4, 3, 3, 2, 2],
                   temperatureMax: [14, 14, 11, 12, 14, 12, 12, 12, 12, 11, 10, 10, 9, 8, 7],
                   temperatureMin: [10, 10, 5, 8, 9, 5, 5, 6, 5, 4, 3, 3, 2, 2, 1],
-                  daypart: [{ 
-                    iconCode: Array(30).fill(28), 
+                  daypart: [{
+                    iconCode: Array(30).fill(28),
                     wxPhraseLong: Array(30).fill("Облачно"),
                     qpfRain: [0, 0, 1.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                     qpfSnow: [0, 0, 0.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -828,7 +878,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white font-sans antialiased pb-10 selection:bg-cyan-500 selection:text-white">
       
-      {/* Шапка с адаптацией для мобильных устройств */}
+      {/* Шапка */}
       <header className="sticky top-0 z-30 backdrop-blur-xl bg-slate-900/80 border-b border-white/10 px-2.5 py-1.5 sm:px-6 sm:py-2.5">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-1.5 sm:gap-3">
           
@@ -1151,7 +1201,7 @@ export default function App() {
 
               </div>
 
-              {/* Блок предупреждений: для AccuWeather MinuteCast сверху (если Summary.Type !== null), Headline.Text всегда снизу */}
+              {/* Блок предупреждений */}
               {hasAlerts && (
                 <div className="mt-2.5 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-400/30 text-amber-200 text-xs sm:text-sm flex items-start gap-2 shadow-sm">
                   <BellRing size={16} className="shrink-0 text-amber-400 animate-pulse mt-0.5" />
@@ -1207,7 +1257,7 @@ export default function App() {
 
             </section>
 
-            {/* 2. Почасовой прогноз */}
+            {/* 2. Почасовой прогноз (время берется строго из подстроки API) */}
             <section className="rounded-2xl bg-white/5 border border-white/15 backdrop-blur-xl p-3 sm:p-4 shadow-lg">
               <div className="flex items-center justify-between mb-2.5">
                 <div className="flex items-center gap-1.5">
@@ -1240,7 +1290,7 @@ export default function App() {
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               >
                 {hourly?.map((h, idx) => {
-                  const hour = new Date(h.timeStr).getHours().toString().padStart(2, '0') + ':00';
+                  const hour = getApiHourString(h.timeStr);
                   const precipBgClass = getPrecipitationStyle(h.rain, h.snow, h.ice, h.total);
 
                   return (
@@ -1305,7 +1355,7 @@ export default function App() {
               </div>
             </section>
 
-            {/* 3. Прогноз на 15 дней (колонки День/Ночь в ряд на мобильных устройствах) */}
+            {/* 3. Прогноз по дням (день недели и дата парсятся строго из строк API) */}
             <section className="rounded-2xl bg-white/5 border border-white/15 backdrop-blur-xl p-3 sm:p-4 shadow-lg">
               <div className="flex items-center justify-between mb-2.5">
                 <div className="flex items-center gap-1.5">
@@ -1319,20 +1369,17 @@ export default function App() {
 
               <div className="space-y-2">
                 {daily?.map((dItem, dayIdx) => {
-                  const date = new Date(dItem.timeStr);
                   const dayName = dayIdx === 0 ? "Сегодня" : dItem.dayName;
-                  const formattedDate = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+                  const formattedDate = formatApiDateString(dItem.timeStr);
 
                   const dayPrecipBg = getPrecipitationStyle(dItem.day.rain, dItem.day.snow, dItem.day.ice, dItem.day.total);
                   const nightPrecipBg = getPrecipitationStyle(dItem.night.rain, dItem.night.snow, dItem.night.ice, dItem.night.total);
 
-                  // Расчет положения отрезка дня относительно всего периода прогноза (Apple Weather style)
                   const totalSpan = forecastExtremes.overallMax - forecastExtremes.overallMin;
                   const leftPercent = Math.max(0, Math.min(100, ((dItem.minTemp - forecastExtremes.overallMin) / totalSpan) * 100));
                   const rightPercent = Math.max(0, Math.min(100, ((dItem.maxTemp - forecastExtremes.overallMin) / totalSpan) * 100));
                   const widthPercent = Math.max(5, rightPercent - leftPercent);
                   
-                  // Адаптивные цвета градиента для текущего отрезка
                   const minColor = getTempColor(dItem.minTemp);
                   const maxColor = getTempColor(dItem.maxTemp);
 
@@ -1357,7 +1404,6 @@ export default function App() {
                             {dItem.minTemp}°
                           </span>
 
-                          {/* Фоновый трек шкалы со смещением отрезка относительно всех дней */}
                           <div className="relative flex-1 h-1.5 sm:h-2 bg-white/10 rounded-full overflow-hidden">
                             <div
                               className="absolute top-0 bottom-0 rounded-full transition-all duration-300 shadow-sm"
@@ -1375,7 +1421,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Горизонтальный ряд: Блок День и Блок Ночь (всегда в ряд: grid-cols-2) */}
+                      {/* Горизонтальный ряд: Блок День и Блок Ночь */}
                       <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
                         
                         {/* ДЕНЬ */}
